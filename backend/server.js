@@ -18,6 +18,17 @@ app.get("/", (req, res) => {
     });
 });
 
+// Railway readiness check: return healthy only when the configured database responds.
+app.get("/health", (req, res) => {
+    db.query("SELECT 1 AS database_ready", (err) => {
+        if (err) {
+            return res.status(503).json({ status: "unavailable" });
+        }
+
+        res.json({ status: "ok" });
+    });
+});
+
 
 // ==========================================
 // USERS
@@ -875,10 +886,10 @@ app.put("/api/settlements/:id/settle", (req, res) => {
 // START SERVER
 // ==========================================
 
-const PORT = 5000;
+const PORT = Number(process.env.PORT || 5000);
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
     console.log(
-        `SmartSplit server running on http://localhost:${PORT}`
+        `SmartSplit server listening on port ${PORT}`
     );
 });
