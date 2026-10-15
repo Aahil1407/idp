@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
-import { API_URL, GROUP_ID } from "../config";
+import { API_URL } from "../config";
 
 function Settlement() {
   const navigate = useNavigate();
+  const { groupId } = useParams();
 
   const [settlements, setSettlements] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,7 +24,7 @@ function Settlement() {
         setError("");
 
         const response = await fetch(
-          `${API_URL}/api/groups/${GROUP_ID}/settlements/optimize`,
+          `${API_URL}/api/groups/${groupId}/settlements/optimize`,
           {
             method: "POST",
             headers: {
@@ -56,7 +57,7 @@ function Settlement() {
     }
 
     loadSettlement();
-  }, []);
+  }, [groupId]);
 
   // ==============================
   // MARK AS SETTLED
@@ -186,7 +187,7 @@ function Settlement() {
       <button
         className="back-button"
         onClick={() =>
-          navigate("/group/goa/balances")
+          navigate(`/group/${groupId}/balances`)
         }
         disabled={settling}
       >
@@ -196,7 +197,7 @@ function Settlement() {
       {/* Header */}
       <div className="page-header">
         <h1>Settlement Plan</h1>
-        <p>Goa Trip</p>
+        <p>Group #{groupId}</p>
       </div>
 
       {/* =========================
@@ -223,7 +224,7 @@ function Settlement() {
           <button
             className="add-expense-button"
             onClick={() =>
-              navigate("/group/goa")
+              navigate(`/group/${groupId}`)
             }
           >
             Back to Group
@@ -364,7 +365,7 @@ function Settlement() {
           <button
             className="add-expense-button"
             onClick={() =>
-              navigate("/group/goa/balances")
+              navigate(`/group/${groupId}/balances`)
             }
             disabled={settling}
           >

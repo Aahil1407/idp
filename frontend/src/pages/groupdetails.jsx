@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
-import { API_URL, GROUP_ID } from "../config";
+import { API_URL } from "../config";
 
 function GroupDetails() {
   const navigate = useNavigate();
+  const { groupId } = useParams();
 
   const [group, setGroup] = useState(null);
   const [members, setMembers] = useState([]);
@@ -19,22 +20,6 @@ function GroupDetails() {
         setLoading(true);
         setError("");
 
-        const [
-          groupResponse,
-          membersResponse,
-          expensesResponse,
-        ] = await Promise.all([
-          fetch(`${API_URL}/api/groups/${GROUP_ID}`, {
-            signal: AbortSignal.timeout(15000),
-          }),
-          fetch(`${API_URL}/api/groups/${GROUP_ID}/members`, {
-            signal: AbortSignal.timeout(15000),
-          }),
-          fetch(`${API_URL}/api/groups/${GROUP_ID}/expenses`, {
-            signal: AbortSignal.timeout(15000),
-          }),
-        ]);
-
         const responseError = async (response, fallback) => {
           let body = {};
           try {
@@ -45,9 +30,22 @@ function GroupDetails() {
           return body.error || body.message || fallback;
         };
 
+        const groupResponse = await fetch(`${API_URL}/api/groups/${groupId}`, {
+          signal: AbortSignal.timeout(15000),
+        });
         if (!groupResponse.ok) {
           throw new Error(await responseError(groupResponse, "Failed to load group."));
         }
+
+        const groupData = await groupResponse.json();
+        const [membersResponse, expensesResponse] = await Promise.all([
+          fetch(`${API_URL}/api/groups/${groupId}/members`, {
+            signal: AbortSignal.timeout(15000),
+          }),
+          fetch(`${API_URL}/api/groups/${groupId}/expenses`, {
+            signal: AbortSignal.timeout(15000),
+          }),
+        ]);
 
         if (!membersResponse.ok) {
           throw new Error(await responseError(membersResponse, "Failed to load group members."));
@@ -57,7 +55,6 @@ function GroupDetails() {
           throw new Error(await responseError(expensesResponse, "Failed to load expenses."));
         }
 
-        const groupData = await groupResponse.json();
         const membersData = await membersResponse.json();
         const expensesData = await expensesResponse.json();
 
@@ -78,7 +75,7 @@ function GroupDetails() {
     }
 
     loadGroupData();
-  }, []);
+  }, [groupId]);
 
   // =========================
   // LOADING
@@ -110,8 +107,12 @@ function GroupDetails() {
         </button>
 
         <div className="page-header">
-          <h1>Something went wrong</h1>
-          <p>{error}</p>
+          <h1>{error === "Group not found" ? "Group not found" : "Something went wrong"}</h1>
+          <p>
+            {error === "Group not found"
+              ? "This group does not exist or the link is no longer valid. Return home and choose an available group."
+              : error}
+          </p>
         </div>
       </div>
     );
@@ -228,7 +229,7 @@ function GroupDetails() {
       <button
         className="add-expense-button"
         onClick={() =>
-          navigate("/group/goa/add-expense")
+          navigate(`/group/${groupId}/add-expense`)
         }
       >
         + Add Expense
@@ -238,7 +239,7 @@ function GroupDetails() {
       <button
         className="balances-button"
         onClick={() =>
-          navigate("/group/goa/balances")
+          navigate(`/group/${groupId}/balances`)
         }
       >
         View Balances

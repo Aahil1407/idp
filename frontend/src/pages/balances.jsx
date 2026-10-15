@@ -1,13 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  API_URL,
-  GROUP_ID,
-  CURRENT_USER_ID,
-} from "../config";
+import { useNavigate, useParams } from "react-router-dom";
+import { API_URL, CURRENT_USER_ID } from "../config";
 
 function Balances() {
   const navigate = useNavigate();
+  const { groupId } = useParams();
 
   const [balances, setBalances] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,7 +21,7 @@ function Balances() {
         setError("");
 
         const response = await fetch(
-          `${API_URL}/api/groups/${GROUP_ID}/balances`
+          `${API_URL}/api/groups/${groupId}/balances`
         );
 
         if (!response.ok) {
@@ -48,7 +45,7 @@ function Balances() {
     }
 
     loadBalances();
-  }, []);
+  }, [groupId]);
 
   // =========================
   // LOADING
@@ -74,7 +71,7 @@ function Balances() {
       <div className="phone-app balances-page">
         <button
           className="back-button"
-          onClick={() => navigate("/group/goa")}
+          onClick={() => navigate(`/group/${groupId}`)}
         >
           ←
         </button>
@@ -109,7 +106,7 @@ const yourBalance = currentUser?.balance ?? 0;
       {/* Back */}
       <button
         className="back-button"
-        onClick={() => navigate("/group/goa")}
+        onClick={() => navigate(`/group/${groupId}`)}
       >
         ←
       </button>
@@ -117,7 +114,7 @@ const yourBalance = currentUser?.balance ?? 0;
       {/* Header */}
       <div className="page-header">
         <h1>Balances</h1>
-        <p>Goa Trip • {balances.length} members</p>
+        <p>Group #{groupId} • {balances.length} members</p>
       </div>
 
       {/* Your Balance */}
@@ -177,7 +174,7 @@ const yourBalance = currentUser?.balance ?? 0;
       <button
         className="add-expense-button"
         onClick={() =>
-          navigate("/group/goa/settlement")
+          navigate(`/group/${groupId}/settlement`)
         }
       >
         View Settlement Plan

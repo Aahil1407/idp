@@ -1,9 +1,10 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { API_URL, GROUP_ID } from "../config";
+import { API_URL } from "../config";
 
 function AddExpense() {
   const navigate = useNavigate();
+  const { groupId } = useParams();
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -23,7 +24,7 @@ function AddExpense() {
     async function loadMembers() {
       try {
         const response = await fetch(
-          `${API_URL}/api/groups/${GROUP_ID}/members`
+          `${API_URL}/api/groups/${groupId}/members`
         );
 
         if (!response.ok) {
@@ -47,7 +48,7 @@ function AddExpense() {
     }
 
     loadMembers();
-  }, []);
+  }, [groupId]);
 
   // =========================
   // ADD EXPENSE
@@ -101,7 +102,7 @@ function AddExpense() {
       console.log("Sending expense:", expenseData);
 
       const response = await fetch(
-        `${API_URL}/api/groups/${GROUP_ID}/expenses`,
+        `${API_URL}/api/groups/${groupId}/expenses`,
         {
           method: "POST",
           headers: {
@@ -123,7 +124,7 @@ function AddExpense() {
 
       // Return to Group Details.
       // Group Details will fetch the latest expenses from backend.
-      navigate("/group/goa");
+      navigate(`/group/${groupId}`);
 
     } catch (err) {
       console.error(err);
@@ -161,7 +162,7 @@ function AddExpense() {
       <div className="phone-app add-expense-page">
         <button
           className="back-button"
-          onClick={() => navigate("/group/goa")}
+          onClick={() => navigate(`/group/${groupId}`)}
         >
           ←
         </button>
@@ -184,14 +185,14 @@ function AddExpense() {
       {/* Back */}
       <button
         className="back-button"
-        onClick={() => navigate("/group/goa")}
+        onClick={() => navigate(`/group/${groupId}`)}
       >
         ←
       </button>
 
       <div className="page-header">
         <h1>Add Expense</h1>
-        <p>Goa Trip</p>
+        <p>Group #{groupId}</p>
       </div>
 
       <form onSubmit={handleAddExpense}>

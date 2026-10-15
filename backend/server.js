@@ -96,6 +96,26 @@ app.post("/api/users", (req, res) => {
 // GROUPS
 // ==========================================
 
+// GET ALL GROUPS
+app.get("/api/groups", (req, res) => {
+    const sql = `
+        SELECT group_id, group_name
+        FROM groups_table
+        ORDER BY group_id ASC
+    `;
+
+    db.query(sql, (err, results) => {
+        if (err) {
+            console.log(err);
+            return res.status(500).json({
+                error: "Database error"
+            });
+        }
+
+        res.json(results);
+    });
+});
+
 // CREATE GROUP
 app.post("/api/groups", (req, res) => {
 
