@@ -280,18 +280,23 @@ function Settlement() {
                       </div>
 
                       <div className="settlement-details">
+                        <div className="settlement-person">
+                          <span className="settlement-person-label">Payer</span>
+                          <strong className="settlement-person-name">
+                            {settlement.from_name}
+                          </strong>
+                        </div>
 
-                        <strong>
-                          {settlement.from_name}
-                        </strong>
-
-                        <span className="settlement-arrow">
+                        <span className="settlement-arrow" aria-hidden="true">
                           →
                         </span>
 
-                        <strong>
-                          {settlement.to_name}
-                        </strong>
+                        <div className="settlement-person">
+                          <span className="settlement-person-label">Recipient</span>
+                          <strong className="settlement-person-name">
+                            {settlement.to_name}
+                          </strong>
+                        </div>
 
                       </div>
 
