@@ -33,6 +33,103 @@ body {
   overflow-y: auto;
 }
 
+.mode-page {
+  padding-top: 0;
+}
+
+.mode-intro {
+  margin: 42px 0 30px;
+}
+
+.mode-eyebrow {
+  margin: 0 0 10px;
+  color: #b7dccb;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mode-intro h1,
+.business-placeholder h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.15;
+}
+
+.mode-intro > p:last-child,
+.business-placeholder > p:last-of-type {
+  color: #aaa;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.mode-options {
+  display: grid;
+  gap: 14px;
+}
+
+.mode-option {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 92px;
+  padding: 17px;
+  border: 1px solid #30333a;
+  border-radius: 18px;
+  color: #fff;
+  text-decoration: none;
+}
+
+.personal-option { background: #18221f; border-color: #476758; }
+.business-option { background: #1b1d22; }
+
+.mode-option-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: #b7dccb;
+  color: #101512;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.mode-option > span:nth-child(2) { display: grid; gap: 5px; flex: 1; }
+.mode-option strong { font-size: 16px; }
+.mode-option small { color: #aaa; font-size: 12px; line-height: 1.4; }
+.mode-option i { color: #b7dccb; font-size: 10px; font-style: normal; font-weight: 600; }
+.mode-chevron { color: #b7dccb; font-size: 19px; }
+
+.mode-back-link {
+  display: inline-block;
+  margin: 4px 0 18px;
+  color: #b7dccb;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.business-placeholder {
+  margin-top: 110px;
+  text-align: center;
+}
+
+.business-placeholder .mode-option-icon { margin: 0 auto 20px; }
+.business-placeholder .mode-eyebrow { margin-bottom: 9px; }
+.mode-return-button {
+  display: inline-block;
+  margin-top: 18px;
+  padding: 13px 18px;
+  border-radius: 12px;
+  background: #b7dccb;
+  color: #101512;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 /* HEADER */
 
 .header {
@@ -753,6 +850,17 @@ body {
 
 .settle-button:active {
   transform: scale(0.98);
+}
+
+.settlement-unavailable {
+  margin: 18px 0 0;
+  padding: 13px;
+  border: 1px solid #6c4f32;
+  border-radius: 12px;
+  background: #281f17;
+  color: #f1c995;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 /* =========================

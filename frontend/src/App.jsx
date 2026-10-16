@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, Link } from "react-router-dom";
 import "./App.css";
 
 import { API_URL } from "./config";
@@ -109,6 +109,8 @@ function Home() {
         </div>
       </header>
 
+      <Link className="mode-back-link" to="/">← All SmartSplit modes</Link>
+
       <section className="greeting">
         <h2>SmartSplit</h2>
         <p>Your groups and shared expenses</p>
@@ -180,11 +182,58 @@ function Home() {
   );
 }
 
+function ModeChoice() {
+  return (
+    <main className="phone-app mode-page">
+      <header className="header">
+        <div className="brand">
+          <div className="brand-icon" aria-hidden="true">✦</div>
+          <span>Smart<span>Split</span></span>
+        </div>
+      </header>
+      <section className="mode-intro">
+        <p className="mode-eyebrow">Shared expenses, made simple</p>
+        <h1>How will you use SmartSplit?</h1>
+        <p>Choose a space to get started.</p>
+      </section>
+      <nav className="mode-options" aria-label="Choose SmartSplit mode">
+        <Link className="mode-option personal-option" to="/personal">
+          <span className="mode-option-icon" aria-hidden="true">↗</span>
+          <span><strong>Personal</strong><small>Groups, shared expenses and balances</small></span>
+          <span className="mode-chevron" aria-hidden="true">→</span>
+        </Link>
+        <Link className="mode-option business-option" to="/business">
+          <span className="mode-option-icon" aria-hidden="true">▦</span>
+          <span><strong>Business <i>Coming soon</i></strong><small>Business expense tools are on the way</small></span>
+          <span className="mode-chevron" aria-hidden="true">→</span>
+        </Link>
+      </nav>
+    </main>
+  );
+}
+
+function BusinessComingSoon() {
+  return (
+    <main className="phone-app mode-page">
+      <Link className="mode-back-link" to="/">← All SmartSplit modes</Link>
+      <section className="business-placeholder">
+        <span className="mode-option-icon" aria-hidden="true">▦</span>
+        <p className="mode-eyebrow">Business</p>
+        <h1>Coming soon</h1>
+        <p>Business expense management is planned for a future release.</p>
+        <Link className="mode-return-button" to="/">Back to mode choice</Link>
+      </section>
+    </main>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<ModeChoice />} />
+        <Route path="/personal" element={<Home />} />
+        <Route path="/business" element={<BusinessComingSoon />} />
         <Route path="/group/:groupId" element={<GroupDetails />} />
         <Route path="/group/:groupId/add-expense" element={<AddExpense />} />
         <Route path="/group/:groupId/balances" element={<Balances />} />

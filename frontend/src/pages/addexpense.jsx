@@ -86,16 +86,18 @@ function AddExpense() {
       setSaving(true);
       setError("");
 
-      const share = numericAmount / members.length;
+      const totalCents = Math.round(numericAmount * 100);
+      const baseCents = Math.floor(totalCents / members.length);
+      const remainderCents = totalCents % members.length;
 
       const expenseData = {
         paid_by: Number(paidBy),
         description: description.trim(),
         amount: numericAmount,
 
-        splits: members.map((member) => ({
+        splits: members.map((member, index) => ({
           user_id: member.user_id,
-          amount_owed: Number(share.toFixed(2)),
+          amount_owed: (baseCents + (index < remainderCents ? 1 : 0)) / 100,
         })),
       };
 

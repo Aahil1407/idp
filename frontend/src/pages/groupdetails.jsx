@@ -101,7 +101,7 @@ function GroupDetails() {
       <div className="phone-app group-page">
         <button
           className="back-button"
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/personal")}
         >
           ←
         </button>
@@ -128,7 +128,7 @@ function GroupDetails() {
       {/* Back */}
       <button
         className="back-button"
-        onClick={() => navigate("/")}
+        onClick={() => navigate("/personal")}
       >
         ←
       </button>

@@ -1,385 +1,66 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-
 import { API_URL } from "../config";
+
+const formatAmount = (amount) => new Intl.NumberFormat("en-IN", {
+  style: "currency", currency: "INR", maximumFractionDigits: 2,
+}).format(Number(amount) || 0);
 
 function Settlement() {
   const navigate = useNavigate();
   const { groupId } = useParams();
-
   const [settlements, setSettlements] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [settling, setSettling] = useState(false);
   const [error, setError] = useState("");
-  const [settled, setSettled] = useState(false);
-
-  // ==============================
-  // LOAD OPTIMIZED SETTLEMENT
-  // ==============================
 
   useEffect(() => {
     async function loadSettlement() {
       try {
         setLoading(true);
         setError("");
-
-        const response = await fetch(
-          `${API_URL}/api/groups/${groupId}/settlements/optimize`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
-
+        const response = await fetch(`${API_URL}/api/groups/${groupId}/settlements/optimize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
         const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            data.message || "Failed to generate settlement."
-          );
-        }
-
-        console.log("Backend settlement:", data);
-
+        if (!response.ok) throw new Error(data.error || data.message || "Failed to generate settlement.");
         setSettlements(data.settlements || []);
       } catch (err) {
-        console.error(err);
-
-        setError(
-          err.message ||
-            "Unable to load settlement plan."
-        );
+        setError(err.message || "Unable to load settlement plan.");
       } finally {
         setLoading(false);
       }
     }
-
     loadSettlement();
   }, [groupId]);
 
-  // ==============================
-  // MARK AS SETTLED
-  // ==============================
-
-  async function handleSettlement() {
-    if (settlements.length === 0) {
-      return;
-    }
-
-    try {
-      setSettling(true);
-      setError("");
-
-      // Process every settlement returned by backend
-      for (const settlement of settlements) {
-
-        // ------------------------------
-        // 1. CREATE PAYMENT
-        // ------------------------------
-
-        const paymentResponse = await fetch(
-          `${API_URL}/api/settlements/pay`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              from_user: settlement.from_user,
-              to_user: settlement.to_user,
-              amount: Number(settlement.amount),
-            }),
-          }
-        );
-
-        const paymentData = await paymentResponse.json();
-
-        if (!paymentResponse.ok) {
-          throw new Error(
-            paymentData.message ||
-              "Failed to create payment."
-          );
-        }
-
-        const paymentId = paymentData.payment_id;
-
-        if (!paymentId) {
-          throw new Error(
-            "Backend did not return a payment ID."
-          );
-        }
-
-        console.log(
-          "Payment created:",
-          paymentId
-        );
-
-        // ------------------------------
-        // 2. MARK PAYMENT AS SETTLED
-        // ------------------------------
-
-        const settleResponse = await fetch(
-          `${API_URL}/api/settlements/${paymentId}/settle`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
-
-        const settleData =
-          await settleResponse.json();
-
-        if (!settleResponse.ok) {
-          throw new Error(
-            settleData.message ||
-              "Failed to settle payment."
-          );
-        }
-
-        console.log(
-          "Payment settled:",
-          settleData
-        );
-      }
-
-      // Only show success AFTER all payments succeed
-      setSettled(true);
-
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        err.message ||
-          "Unable to complete settlement."
-      );
-    } finally {
-      setSettling(false);
-    }
-  }
-
-  // ==============================
-  // LOADING
-  // ==============================
-
-  if (loading) {
-    return (
-      <div className="phone-app settlement-page">
-        <div className="page-header">
-          <h1>Settlement Plan</h1>
-          <p>Calculating optimized payments...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // ==============================
-  // PAGE
-  // ==============================
+  if (loading) return <div className="phone-app settlement-page"><div className="page-header"><h1>Settlement Plan</h1><p>Calculating optimized payments…</p></div></div>;
 
   return (
     <div className="phone-app settlement-page">
-
-      {/* Back button */}
-      <button
-        className="back-button"
-        onClick={() =>
-          navigate(`/group/${groupId}/balances`)
-        }
-        disabled={settling}
-      >
-        ←
-      </button>
-
-      {/* Header */}
-      <div className="page-header">
-        <h1>Settlement Plan</h1>
-        <p>Group #{groupId}</p>
-      </div>
-
-      {/* =========================
-          SETTLED STATE
-      ========================= */}
-
-      {settled ? (
-        <>
-          <div className="settled-success-card">
-
-            <div className="settled-icon">
-              ✓
+      <button className="back-button" onClick={() => navigate(`/group/${groupId}/balances`)}>←</button>
+      <div className="page-header"><h1>Settlement Plan</h1><p>Group #{groupId}</p></div>
+      <div className="settlement-info-card"><p>Optimized settlement</p><span>Transfer amounts are calculated by the group settlement API.</span></div>
+      {error ? <p className="home-state home-error" role="alert">{error}</p> : (
+        <section className="settlement-section">
+          <h3>Payments</h3>
+          {settlements.length === 0 ? <p className="no-settlement">Everyone is settled up.</p> : settlements.map((settlement, index) => (
+            <div className="settlement-card" key={`${settlement.from_user}-${settlement.to_user}-${index}`}>
+              <div className="settlement-left">
+                <div className="settlement-avatar" aria-hidden="true">{settlement.from_name?.charAt(0) || "?"}</div>
+                <div className="settlement-details">
+                  <div className="settlement-person"><span className="settlement-person-label">Payer</span><strong className="settlement-person-name">{settlement.from_name}</strong></div>
+                  <span className="settlement-arrow" aria-hidden="true">→</span>
+                  <div className="settlement-person"><span className="settlement-person-label">Recipient</span><strong className="settlement-person-name">{settlement.to_name}</strong></div>
+                </div>
+              </div>
+              <div className="settlement-right"><span className="settlement-label">pays</span><strong className="settlement-amount">{formatAmount(settlement.amount)}</strong></div>
             </div>
-
-            <h2>Settlement Complete</h2>
-
-            <p>
-              All outstanding payments have been
-              marked as settled.
-            </p>
-
-          </div>
-
-          <button
-            className="add-expense-button"
-            onClick={() =>
-              navigate(`/group/${groupId}`)
-            }
-          >
-            Back to Group
-          </button>
-        </>
-
-      ) : (
-
-        <>
-          {/* =========================
-              SETTLEMENT INFO
-          ========================= */}
-
-          <div className="settlement-info-card">
-
-            <p>Optimized settlement</p>
-
-            <span>
-              SmartSplit has minimized the number
-              of payments.
-            </span>
-
-          </div>
-
-          {/* =========================
-              PAYMENTS
-          ========================= */}
-
-          <section className="settlement-section">
-
-            <h3>Payments</h3>
-
-            {settlements.length === 0 ? (
-
-              <p className="no-settlement">
-                Everyone is settled up 🎉
-              </p>
-
-            ) : (
-
-              settlements.map(
-                (settlement, index) => (
-
-                  <div
-                    className="settlement-card"
-                    key={index}
-                  >
-
-                    <div className="settlement-left">
-
-                      <div className="settlement-avatar">
-                        {settlement.from_name.charAt(0)}
-                      </div>
-
-                      <div className="settlement-details">
-                        <div className="settlement-person">
-                          <span className="settlement-person-label">Payer</span>
-                          <strong className="settlement-person-name">
-                            {settlement.from_name}
-                          </strong>
-                        </div>
-
-                        <span className="settlement-arrow" aria-hidden="true">
-                          →
-                        </span>
-
-                        <div className="settlement-person">
-                          <span className="settlement-person-label">Recipient</span>
-                          <strong className="settlement-person-name">
-                            {settlement.to_name}
-                          </strong>
-                        </div>
-
-                      </div>
-
-                    </div>
-
-                    <div className="settlement-right">
-
-                      <span className="settlement-label">
-                        pays
-                      </span>
-
-                      <strong className="settlement-amount">
-                        ₹
-                        {Number(
-                          settlement.amount
-                        ).toLocaleString(
-                          "en-IN",
-                          {
-                            maximumFractionDigits: 0,
-                          }
-                        )}
-                      </strong>
-
-                    </div>
-
-                  </div>
-                )
-              )
-
-            )}
-
-          </section>
-
-          {/* =========================
-              ERROR
-          ========================= */}
-
-          {error && (
-            <p
-              style={{
-                color: "#ff6b6b",
-                marginBottom: "16px",
-              }}
-            >
-              {error}
-            </p>
-          )}
-
-          {/* =========================
-              MARK AS SETTLED
-          ========================= */}
-
-          {settlements.length > 0 && (
-
-            <button
-              className="settle-button"
-              onClick={handleSettlement}
-              disabled={settling}
-            >
-              {settling
-                ? "Processing..."
-                : "✓ Mark as Settled"}
-            </button>
-
-          )}
-
-          {/* =========================
-              BACK
-          ========================= */}
-
-          <button
-            className="add-expense-button"
-            onClick={() =>
-              navigate(`/group/${groupId}/balances`)
-            }
-            disabled={settling}
-          >
-            Back to Balances
-          </button>
-
-        </>
+          ))}
+        </section>
       )}
-
+      {!error && settlements.length > 0 && <p className="settlement-unavailable" role="status">Settlement recording is unavailable because this backend does not store payments against a group. No payment has been recorded or transferred.</p>}
+      <button className="add-expense-button" onClick={() => navigate(`/group/${groupId}/balances`)}>Back to Balances</button>
     </div>
   );
 }
