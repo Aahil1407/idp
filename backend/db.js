@@ -38,13 +38,4 @@ const db = mysql.createConnection({
     ssl
 });
 
-db.connect((err) => {
-    if (err) {
-        console.error("MySQL connection failed:", err.code || "connection error");
-        return;
-    }
-
-    console.log("Connected to SmartSplit MySQL database!");
-});
-
 module.exports = db;

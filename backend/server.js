@@ -1,11 +1,13 @@
 const express = require("express");
 const cors = require("cors");
-const db = require("./db");
+const { getGroupBalances, optimizeSettlements } = require("./group-balances");
+let db;
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.locals.database = null;
 
 
 // ==========================================
@@ -563,89 +565,14 @@ app.get("/api/groups/:id/expenses", (req, res) => {
 // ==========================================
 
 app.get("/api/groups/:id/balances", (req, res) => {
-
-    const groupId = req.params.id;
-
-    const sql = `
-        SELECT
-            u.user_id,
-            u.name,
-
-            COALESCE(paid.total_paid, 0) AS total_paid,
-
-            COALESCE(owed.total_owed, 0) AS total_owed
-
-        FROM group_members gm
-
-        JOIN users u
-            ON gm.user_id = u.user_id
-
-        LEFT JOIN (
-
-            SELECT
-                e.paid_by AS user_id,
-                SUM(e.amount) AS total_paid
-
-            FROM expenses e
-
-            WHERE e.group_id = ?
-
-            GROUP BY e.paid_by
-
-        ) paid
-            ON u.user_id = paid.user_id
-
-        LEFT JOIN (
-
-            SELECT
-                es.user_id,
-                SUM(es.amount_owed) AS total_owed
-
-            FROM expense_splits es
-
-            JOIN expenses e
-                ON es.expense_id = e.expense_id
-
-            WHERE e.group_id = ?
-
-            GROUP BY es.user_id
-
-        ) owed
-            ON u.user_id = owed.user_id;
-
-    `;
-
-    db.query(
-        sql,
-        [groupId, groupId],
-        (err, results) => {
-
-            if (err) {
-                console.log(err);
-
-                return res.status(500).json({
-                    error: "Database error"
-                });
-            }
-
-            const balances = results.map(user => {
-
-                const balance =
-                    Number(user.total_paid) -
-                    Number(user.total_owed);
-
-                return {
-                    user_id: user.user_id,
-                    name: user.name,
-                    total_paid: Number(user.total_paid),
-                    total_owed: Number(user.total_owed),
-                    balance: balance
-                };
-            });
-
-            res.json(balances);
+    const groupId = Number(req.params.id);
+    getGroupBalances(app.locals.database, groupId, (err, balances) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Database error" });
         }
-    );
+        res.json(balances);
+    });
 });
 
 
@@ -654,142 +581,14 @@ app.get("/api/groups/:id/balances", (req, res) => {
 // ==========================================
 
 app.post("/api/groups/:id/settlements/optimize", (req, res) => {
-
-    const groupId = req.params.id;
-
-    const balanceSql = `
-        SELECT
-            u.user_id,
-            u.name,
-
-            COALESCE(paid.total_paid, 0) AS total_paid,
-
-            COALESCE(owed.total_owed, 0) AS total_owed
-
-        FROM group_members gm
-
-        JOIN users u
-            ON gm.user_id = u.user_id
-
-        LEFT JOIN (
-
-            SELECT
-                e.paid_by AS user_id,
-                SUM(e.amount) AS total_paid
-
-            FROM expenses e
-
-            WHERE e.group_id = ?
-
-            GROUP BY e.paid_by
-
-        ) paid
-            ON u.user_id = paid.user_id
-
-        LEFT JOIN (
-
-            SELECT
-                es.user_id,
-                SUM(es.amount_owed) AS total_owed
-
-            FROM expense_splits es
-
-            JOIN expenses e
-                ON es.expense_id = e.expense_id
-
-            WHERE e.group_id = ?
-
-            GROUP BY es.user_id
-
-        ) owed
-            ON u.user_id = owed.user_id
-    `;
-
-    db.query(
-        balanceSql,
-        [groupId, groupId],
-        (err, results) => {
-
-            if (err) {
-                console.log(err);
-
-                return res.status(500).json({
-                    error: "Could not calculate balances"
-                });
-            }
-
-            const creditors = [];
-            const debtors = [];
-
-            results.forEach(user => {
-
-                const balance =
-                    Number(user.total_paid) -
-                    Number(user.total_owed);
-
-                if (balance > 0.01) {
-
-                    creditors.push({
-                        user_id: user.user_id,
-                        name: user.name,
-                        amount: balance
-                    });
-
-                } else if (balance < -0.01) {
-
-                    debtors.push({
-                        user_id: user.user_id,
-                        name: user.name,
-                        amount: Math.abs(balance)
-                    });
-
-                }
-            });
-
-            const settlements = [];
-
-            let i = 0;
-            let j = 0;
-
-            while (
-                i < debtors.length &&
-                j < creditors.length
-            ) {
-
-                const debtor = debtors[i];
-                const creditor = creditors[j];
-
-                const paymentAmount = Math.min(
-                    debtor.amount,
-                    creditor.amount
-                );
-
-                settlements.push({
-                    from_user: debtor.user_id,
-                    from_name: debtor.name,
-                    to_user: creditor.user_id,
-                    to_name: creditor.name,
-                    amount: Number(paymentAmount.toFixed(2))
-                });
-
-                debtor.amount -= paymentAmount;
-                creditor.amount -= paymentAmount;
-
-                if (debtor.amount < 0.01) {
-                    i++;
-                }
-
-                if (creditor.amount < 0.01) {
-                    j++;
-                }
-            }
-
-            res.json({
-                group_id: Number(groupId),
-                settlements: settlements
-            });
+    const groupId = Number(req.params.id);
+    getGroupBalances(app.locals.database, groupId, (err, balances) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Could not calculate balances" });
         }
-    );
+        res.json(optimizeSettlements(balances, groupId));
+    });
 });
 
 
@@ -798,63 +597,75 @@ app.post("/api/groups/:id/settlements/optimize", (req, res) => {
 // ==========================================
 
 app.post("/api/settlements/pay", (req, res) => {
-
-    const {
-        from_user,
-        to_user,
-        amount
-    } = req.body;
-
-
-    // ==========================================
-    // VALIDATION
-    // ==========================================
-
-    if (!from_user || !to_user || amount === undefined) {
-        return res.status(400).json({
-            error: "from_user, to_user and amount are required"
-        });
-    }
-
+    const { group_id, from_user, to_user, amount } = req.body;
+    const groupId = Number(group_id);
+    const fromUser = Number(from_user);
+    const toUser = Number(to_user);
     const paymentAmount = Number(amount);
 
-    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
-        return res.status(400).json({
-            error: "amount must be greater than 0"
-        });
+    if (![groupId, fromUser, toUser].every(Number.isSafeInteger) || groupId <= 0 || fromUser <= 0 || toUser <= 0 || amount === undefined) {
+        return res.status(400).json({ error: "group_id, from_user, to_user and amount are required" });
+    }
+    if (fromUser === toUser) {
+        return res.status(400).json({ error: "from_user and to_user must be different group members" });
+    }
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || paymentAmount > 9999999999.99 || Math.round(paymentAmount * 100) !== paymentAmount * 100) {
+        return res.status(400).json({ error: "amount must be a positive amount with at most two decimal places" });
     }
 
-
-    // ==========================================
-    // CREATE PAYMENT
-    // ==========================================
-
-    const sql = `
-        INSERT INTO payments
-        (from_user, to_user, amount)
-        VALUES (?, ?, ?)
+    const membershipSql = `
+        SELECT g.group_id, gm.user_id
+        FROM groups_table g
+        LEFT JOIN group_members gm
+            ON gm.group_id = g.group_id
+            AND gm.user_id IN (?, ?)
+        WHERE g.group_id = ?
     `;
 
-    db.query(
-        sql,
-        [from_user, to_user, paymentAmount],
-        (err, result) => {
+    app.locals.database.query(membershipSql, [fromUser, toUser, groupId], (groupErr, rows) => {
+        if (groupErr) {
+            console.error(groupErr);
+            return res.status(500).json({ error: "Could not verify group members" });
+        }
+        if (rows.length === 0) {
+            return res.status(404).json({ error: "Group not found" });
+        }
 
-            if (err) {
-                console.log(err);
+        const memberIds = new Set(rows.map((row) => Number(row.user_id)).filter(Boolean));
+        if (!memberIds.has(fromUser) || !memberIds.has(toUser)) {
+            return res.status(400).json({ error: "Both payment users must be members of the group" });
+        }
 
-                return res.status(500).json({
-                    error: "Could not create payment"
-                });
+        getGroupBalances(app.locals.database, groupId, (balanceErr, balances) => {
+            if (balanceErr) {
+                console.error(balanceErr);
+                return res.status(500).json({ error: "Could not verify current group balances" });
+            }
+            const debtor = balances.find((user) => Number(user.user_id) === fromUser);
+            const creditor = balances.find((user) => Number(user.user_id) === toUser);
+            if (!debtor || !creditor || debtor.balance >= -0.01 || creditor.balance <= 0.01 || paymentAmount > Math.abs(debtor.balance) + 0.005 || paymentAmount > creditor.balance + 0.005) {
+                return res.status(400).json({ error: "Payment must match a current debt from the selected member to the selected creditor" });
             }
 
-            res.status(201).json({
-                message: "Payment created",
-                payment_id: result.insertId
-            });
+            const insertSql = `
+                INSERT INTO payments (group_id, from_user, to_user, amount)
+                VALUES (?, ?, ?, ?)
+            `;
+            app.locals.database.query(insertSql, [groupId, fromUser, toUser, paymentAmount], (insertErr, result) => {
+                if (insertErr) {
+                    console.error(insertErr);
+                    return res.status(500).json({ error: "Could not create payment" });
+                }
 
-        }
-    );
+                res.status(201).json({
+                    message: "Settlement recorded in SmartSplit as pending",
+                    payment_id: result.insertId,
+                    group_id: groupId,
+                    status: "pending",
+                });
+            });
+        });
+    });
 });
 
 // ==========================================
@@ -872,7 +683,7 @@ app.put("/api/settlements/:id/settle", (req, res) => {
         AND status = 'pending'
     `;
 
-    db.query(
+    app.locals.database.query(
         sql,
         [paymentId],
         (err, result) => {
@@ -892,7 +703,7 @@ app.put("/api/settlements/:id/settle", (req, res) => {
             }
 
             res.json({
-                message: "Payment marked as settled",
+                message: "Settlement marked as settled in SmartSplit",
                 payment_id: Number(paymentId),
                 status: "settled"
             });
@@ -908,8 +719,19 @@ app.put("/api/settlements/:id/settle", (req, res) => {
 
 const PORT = Number(process.env.PORT || 5000);
 
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(
-        `SmartSplit server listening on port ${PORT}`
-    );
-});
+if (require.main === module) {
+    db = require("./db");
+    app.locals.database = db;
+    db.connect((err) => {
+        if (err) {
+            console.error("MySQL connection failed:", err.code || "connection error");
+            return;
+        }
+        console.log("Connected to SmartSplit MySQL database!");
+    });
+    app.listen(PORT, "0.0.0.0", () => {
+        console.log(`SmartSplit server listening on port ${PORT}`);
+    });
+}
+
+module.exports = { app };

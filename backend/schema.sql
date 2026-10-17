@@ -66,12 +66,14 @@ CREATE TABLE IF NOT EXISTS expense_splits (
 
 CREATE TABLE IF NOT EXISTS payments (
     payment_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    group_id INT UNSIGNED NULL,
     from_user INT UNSIGNED NOT NULL,
     to_user INT UNSIGNED NOT NULL,
     amount DECIMAL(12,2) NOT NULL,
     payment_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     status ENUM('pending', 'settled') NOT NULL DEFAULT 'pending',
     PRIMARY KEY (payment_id),
+    KEY idx_payments_group_status (group_id, status),
     KEY idx_payments_from_user (from_user),
     KEY idx_payments_to_user (to_user),
     KEY idx_payments_status (status),
@@ -79,5 +81,7 @@ CREATE TABLE IF NOT EXISTS payments (
     CONSTRAINT fk_payments_from_user FOREIGN KEY (from_user)
         REFERENCES users (user_id) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_payments_to_user FOREIGN KEY (to_user)
-        REFERENCES users (user_id) ON UPDATE CASCADE ON DELETE RESTRICT
+        REFERENCES users (user_id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_payments_group FOREIGN KEY (group_id)
+        REFERENCES groups_table (group_id) ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
