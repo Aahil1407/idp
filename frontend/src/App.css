@@ -1104,14 +1104,17 @@ body {
 }
 
 .allocation-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, 132px);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
-  gap: 4px 10px;
-  padding: 10px 11px;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
   border: 1px solid #2b3230;
   border-radius: 12px;
   background: #111514;
+  box-sizing: border-box;
 }
 
 .allocation-row.allocation-invalid {
@@ -1120,6 +1123,7 @@ body {
 }
 
 .allocation-person {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1127,12 +1131,12 @@ body {
 }
 
 .allocation-person-name {
-  overflow: hidden;
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: #edf2ef;
   font-size: 12px;
   font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
 }
 
 .allocation-person-label {
@@ -1140,15 +1144,20 @@ body {
   font-size: 10px;
 }
 
-.allocation-input-wrap {
+.form-group label.allocation-input-wrap {
+  flex: 0 0 136px;
   display: flex;
   align-items: center;
-  min-width: 0;
-  height: 38px;
-  padding: 0 9px;
+  gap: 4px;
+  width: 136px;
+  min-width: 112px;
+  height: 42px;
+  margin: 0;
+  padding: 0 10px;
   border: 1px solid #343d39;
   border-radius: 9px;
   background: #191e1c;
+  box-sizing: border-box;
 }
 
 .allocation-input-wrap:focus-within {
@@ -1164,21 +1173,30 @@ body {
 }
 
 .allocation-input-wrap input {
-  width: 100%;
+  flex: 1 1 auto;
+  width: 0;
   min-width: 0;
-  height: 36px;
-  padding: 0 0 0 5px;
+  height: 40px;
+  margin: 0;
+  padding: 0 4px;
   border: 0;
   background: transparent;
   color: #fff;
   font: inherit;
-  font-size: 12px;
+  font-size: 15px;
   text-align: right;
   outline: 0;
+  box-sizing: border-box;
+}
+
+.allocation-input-wrap input::-webkit-inner-spin-button,
+.allocation-input-wrap input::-webkit-outer-spin-button {
+  opacity: 0.7;
+  margin: 0;
 }
 
 .allocation-field-error {
-  grid-column: 1 / -1;
+  flex: 0 0 100%;
   color: #ffaaa1;
   font-size: 10px;
   line-height: 1.4;
@@ -1258,7 +1276,21 @@ body {
   }
 
   .allocation-list {
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
+
+@media (max-width: 360px) {
+  .allocation-row {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .form-group label.allocation-input-wrap {
+    flex-basis: 120px;
+    width: 120px;
+    min-width: 108px;
+    padding-inline: 8px;
   }
 }
 
