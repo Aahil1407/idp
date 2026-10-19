@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS payments (
     status ENUM('pending', 'settled') NOT NULL DEFAULT 'pending',
     PRIMARY KEY (payment_id),
     KEY idx_payments_group_status (group_id, status),
+    KEY idx_payments_group_from_user (group_id, from_user),
+    KEY idx_payments_group_to_user (group_id, to_user),
     KEY idx_payments_from_user (from_user),
     KEY idx_payments_to_user (to_user),
     KEY idx_payments_status (status),
@@ -83,5 +85,9 @@ CREATE TABLE IF NOT EXISTS payments (
     CONSTRAINT fk_payments_to_user FOREIGN KEY (to_user)
         REFERENCES users (user_id) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_payments_group FOREIGN KEY (group_id)
-        REFERENCES groups_table (group_id) ON UPDATE CASCADE ON DELETE RESTRICT
+        REFERENCES groups_table (group_id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_payments_from_group_member FOREIGN KEY (group_id, from_user)
+        REFERENCES group_members (group_id, user_id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_payments_to_group_member FOREIGN KEY (group_id, to_user)
+        REFERENCES group_members (group_id, user_id) ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

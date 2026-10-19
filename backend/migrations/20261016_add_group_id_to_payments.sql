@@ -1,3 +1,7 @@
+-- DEPRECATED, PARTIAL historical migration retained for reference only.
+-- Do not run this file as a complete upgrade or alongside the full
+-- 20261015_add_group_id_to_payments.sql migration. It does not add the two
+-- group_members composite foreign keys or their supporting indexes.
 -- Add nullable group scope to payments. Existing rows remain NULL intentionally;
 -- do not infer their group from users, amounts, or historical settlement data.
 -- This script is safe to re-run when the column, index, and FK already exist.

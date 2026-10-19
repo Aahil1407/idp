@@ -29,13 +29,16 @@ const ssl = process.env.DB_SSL === "true"
     }
     : undefined;
 
-const db = mysql.createConnection({
+const db = mysql.createPool({
     host: process.env.DB_HOST || process.env.MYSQLHOST || urlConfig.host || "localhost",
     port: Number(process.env.DB_PORT || process.env.MYSQLPORT || urlConfig.port || 3306),
     user: process.env.DB_USER || process.env.MYSQLUSER || urlConfig.user || "root",
     password: process.env.DB_PASSWORD ?? process.env.MYSQLPASSWORD ?? urlConfig.password,
     database: process.env.DB_NAME || process.env.MYSQLDATABASE || urlConfig.database || "smartsplit",
-    ssl
+    ssl,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 });
 
 module.exports = db;

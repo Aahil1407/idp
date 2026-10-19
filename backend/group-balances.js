@@ -1,11 +1,9 @@
-const GROUP_BALANCES_SQL = `
+const EXPENSE_BALANCES_SQL = `
     SELECT
         u.user_id,
         u.name,
         COALESCE(paid.total_paid, 0) AS total_paid,
-        COALESCE(owed.total_owed, 0) AS total_owed,
-        COALESCE(outgoing.total_settled_outgoing, 0) AS total_settled_outgoing,
-        COALESCE(incoming.total_settled_incoming, 0) AS total_settled_incoming
+        COALESCE(owed.total_owed, 0) AS total_owed
     FROM group_members gm
     JOIN users u ON gm.user_id = u.user_id
     LEFT JOIN (
@@ -21,85 +19,83 @@ const GROUP_BALANCES_SQL = `
         WHERE e.group_id = ?
         GROUP BY es.user_id
     ) owed ON u.user_id = owed.user_id
-    LEFT JOIN (
-        SELECT p.from_user AS user_id, SUM(p.amount) AS total_settled_outgoing
-        FROM payments p
-        WHERE p.group_id = ? AND p.status = 'settled'
-        GROUP BY p.from_user
-    ) outgoing ON u.user_id = outgoing.user_id
-    LEFT JOIN (
-        SELECT p.to_user AS user_id, SUM(p.amount) AS total_settled_incoming
-        FROM payments p
-        WHERE p.group_id = ? AND p.status = 'settled'
-        GROUP BY p.to_user
-    ) incoming ON u.user_id = incoming.user_id
 `;
 
-function mapGroupBalances(rows) {
-  return rows.map((user) => {
-    const totalPaid = Number(user.total_paid) || 0;
-    const totalOwed = Number(user.total_owed) || 0;
-    const settledOutgoing = Number(user.total_settled_outgoing) || 0;
-    const settledIncoming = Number(user.total_settled_incoming) || 0;
+const SETTLED_PAYMENTS_SQL = `
+    SELECT group_id, from_user, to_user, amount, status
+    FROM payments
+    WHERE group_id = ? AND status = 'settled'
+`;
 
-    return {
-      user_id: user.user_id,
-      name: user.name,
-      total_paid: totalPaid,
-      total_owed: totalOwed,
-      total_settled_outgoing: settledOutgoing,
-      total_settled_incoming: settledIncoming,
-      balance: totalPaid - totalOwed + settledOutgoing - settledIncoming,
-    };
-  });
+function decimalToPaise(value) {
+    const text = String(value ?? "0").trim();
+    const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(text);
+    if (!match) throw new TypeError(`Invalid database monetary value: ${text}`);
+    const paise = BigInt(match[2]) * 100n + BigInt((match[3] || "").padEnd(2, "0") || "0");
+    return match[1] === "-" ? -paise : paise;
 }
 
-function getGroupBalances(database, groupId, callback) {
-  database.query(GROUP_BALANCES_SQL, [groupId, groupId, groupId, groupId], (err, rows) => {
-    if (err) return callback(err);
-    callback(null, mapGroupBalances(rows));
-  });
+function paiseToNumber(paise) {
+    const amount = Number(paise);
+    if (!Number.isSafeInteger(amount)) throw new RangeError("Group monetary total exceeds safe paise precision");
+    return amount / 100;
 }
 
-function optimizeSettlements(balances, groupId) {
-  const creditors = [];
-  const debtors = [];
+function calculateGroupBalances(expenseRows, paymentRows, groupId) {
+    const settledByUser = new Map();
+    const requestedGroupId = String(groupId);
 
-  for (const user of balances) {
-    const balance = Number(user.balance);
-    if (balance > 0.01) creditors.push({ user_id: user.user_id, name: user.name, amount: balance });
-    else if (balance < -0.01) debtors.push({ user_id: user.user_id, name: user.name, amount: Math.abs(balance) });
-  }
+    for (const payment of paymentRows) {
+        if (payment.status !== "settled" || String(payment.group_id) !== requestedGroupId) continue;
 
-  const settlements = [];
-  let debtorIndex = 0;
-  let creditorIndex = 0;
+        const amountPaise = decimalToPaise(payment.amount);
+        if (amountPaise <= 0n) continue;
 
-  while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
-    const debtor = debtors[debtorIndex];
-    const creditor = creditors[creditorIndex];
-    const amount = Math.min(debtor.amount, creditor.amount);
+        const payerId = String(payment.from_user);
+        const recipientId = String(payment.to_user);
+        const payerTotals = settledByUser.get(payerId) || { sent: 0n, received: 0n };
+        const recipientTotals = settledByUser.get(recipientId) || { sent: 0n, received: 0n };
+        payerTotals.sent += amountPaise;
+        recipientTotals.received += amountPaise;
+        settledByUser.set(payerId, payerTotals);
+        settledByUser.set(recipientId, recipientTotals);
+    }
 
-    settlements.push({
-      from_user: debtor.user_id,
-      from_name: debtor.name,
-      to_user: creditor.user_id,
-      to_name: creditor.name,
-      amount: Number(amount.toFixed(2)),
+    return expenseRows.map((user) => {
+        const settled = settledByUser.get(String(user.user_id)) || { sent: 0n, received: 0n };
+        const totalPaidPaise = decimalToPaise(user.total_paid);
+        const totalOwedPaise = decimalToPaise(user.total_owed);
+        const balancePaise = totalPaidPaise - totalOwedPaise + settled.sent - settled.received;
+
+        return {
+            user_id: user.user_id,
+            name: user.name,
+            total_paid: paiseToNumber(totalPaidPaise),
+            total_owed: paiseToNumber(totalOwedPaise),
+            balance: paiseToNumber(balancePaise),
+        };
     });
+}
 
-    debtor.amount -= amount;
-    creditor.amount -= amount;
-    if (debtor.amount < 0.01) debtorIndex++;
-    if (creditor.amount < 0.01) creditorIndex++;
-  }
+function loadGroupBalances(db, groupId, callback) {
+    db.query(EXPENSE_BALANCES_SQL, [groupId, groupId], (expenseError, expenseRows) => {
+        if (expenseError) return callback(expenseError);
 
-  return { group_id: Number(groupId), settlements };
+        db.query(SETTLED_PAYMENTS_SQL, [groupId], (paymentError, paymentRows) => {
+            if (paymentError) return callback(paymentError);
+            try {
+                callback(null, calculateGroupBalances(expenseRows, paymentRows, groupId));
+            } catch (calculationError) {
+                callback(calculationError);
+            }
+        });
+    });
 }
 
 module.exports = {
-  GROUP_BALANCES_SQL,
-  getGroupBalances,
-  mapGroupBalances,
-  optimizeSettlements,
+    EXPENSE_BALANCES_SQL,
+    SETTLED_PAYMENTS_SQL,
+    calculateGroupBalances,
+    decimalToPaise,
+    loadGroupBalances,
 };
