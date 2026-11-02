@@ -6,11 +6,12 @@ import { apiFetch } from "./config";
 import { AuthProvider } from "./auth";
 import { useAuth } from "./auth-context";
 import { LoginPage, SignupPage } from "./pages/authpages";
+import GroupJoin from "./pages/groupjoin";
 import GroupDetails from "./pages/groupdetails";
 import AddExpense from "./pages/addexpense";
 import Balances from "./pages/balances";
 import Settlement from "./pages/settlement";
-import { HistoryScreen, InsightsScreen, ProfileScreen, ThemeScreen } from "./pages/referencepages";
+import { GroupsScreen, HistoryScreen, InsightsScreen, ProfileScreen, ThemeScreen } from "./pages/referencepages";
 
 const formatAmount = (amount) =>
   new Intl.NumberFormat("en-IN", {
@@ -208,7 +209,7 @@ function Home() {
 
       <div className="dashboard-grid">
       <section className="section groups-panel" id="groups">
-        <div className="section-heading"><h3>Your Groups</h3><span>{groups.length ? `${groups.length} groups` : "See all →"}</span></div>
+        <div className="section-heading"><h3>Your Groups</h3><Link to="/groups">{groups.length ? "See all →" : "Browse groups →"}</Link></div>
         {loading ? (
           <p className="home-state" role="status">Loading groups…</p>
         ) : error ? (
@@ -311,20 +312,27 @@ function BusinessComingSoon() {
 
 function Welcome() {
   const { user } = useAuth();
+  const faces = ["👩🏻", "👨🏽", "👴🏻", "👩🏾", "👦🏼"];
   return (
-    <main className="phone-app welcome-page">
-      <div className="welcome-orb welcome-orb-one" aria-hidden="true" />
-      <div className="welcome-orb welcome-orb-two" aria-hidden="true" />
-      <div className="welcome-orb welcome-orb-three" aria-hidden="true" />
-      <div className="welcome-brand-mark" aria-hidden="true">S</div>
-      <div className="welcome-wordmark">Smart<span>Split</span></div>
-      <p className="welcome-tagline">Split bills. Build memories.</p>
-      <div className="welcome-bottom">
-        <p>Smarter spending<br />for better moments.</p>
-        <Link className="welcome-cta" to={user ? "/personal" : "/signup"}>{user ? "Continue" : "Get Started"} <span aria-hidden="true">→</span></Link>
-        {!user && <Link className="welcome-login-link" to="/login">I already have an account · Sign in</Link>}
-        <span className="welcome-pagination" aria-hidden="true"><i /><i /><i /></span>
-      </div>
+    <main className="welcome-page">
+      <section className="welcome-showcase" aria-label="SmartSplit shared bill introduction">
+        <span className="welcome-skip">SmartSplit</span>
+        <div className="welcome-orbit-scene" aria-hidden="true">
+          <span className="welcome-orbit-ring welcome-orbit-outer" />
+          <span className="welcome-orbit-ring welcome-orbit-inner" />
+          {faces.map((face, index) => <span className={`welcome-face welcome-face-${index + 1}`} key={`${face}-${index}`}>{face}</span>)}
+          <span className="welcome-money">₹</span>
+        </div>
+        <div className="welcome-copy">
+          <h1>Easy way<br />to share <em>bill</em></h1>
+          <p>Easy to share bills with your friends and anyone.</p>
+          <div className="welcome-slide-controls" aria-hidden="true"><i /><i /><b /></div>
+        </div>
+        <div className="welcome-actions">
+          <Link className="welcome-cta" to={user ? "/personal" : "/signup"}>{user ? "Continue" : "Get Started"} <span aria-hidden="true">→</span></Link>
+          {!user && <Link className="welcome-login-link" to="/login">I already have an account · Sign in</Link>}
+        </div>
+      </section>
     </main>
   );
 }
@@ -401,10 +409,10 @@ function FloatingNavigation() {
   const groupId = pathname.match(/^\/group\/([^/]+)/)?.[1];
 
   if (!user) return null;
-  if (pathname === "/personal" || ["/history", "/insights", "/profile", "/themes"].includes(pathname)) {
+  if (pathname === "/personal" || ["/groups", "/history", "/insights", "/profile", "/themes"].includes(pathname)) {
     const sections = [
       { id: "/personal#overview", label: "Home", icon: "⌂" },
-      { id: "/personal#groups", label: "Groups", icon: "♧" },
+      { id: "/groups", label: "Groups", icon: "♧" },
       { id: "/history", label: "History", icon: "◷" },
       { id: "/insights", label: "Insights", icon: "◌" },
       { id: "/profile", label: "Profile", icon: "●" },
@@ -447,8 +455,9 @@ function FloatingNavigation() {
 
 function RequireAuth() {
   const { user, ready } = useAuth();
+  const location = useLocation();
   if (!ready) return <main className="phone-app auth-loading" role="status">Checking your sign-in…</main>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   return <Outlet />;
 }
 
@@ -474,6 +483,7 @@ function AppRoutes() {
       <Route element={<RequireAuth />}>
         <Route path="/choose" element={<ModeChoice />} />
         <Route path="/personal" element={<Home />} />
+        <Route path="/groups" element={<GroupsScreen />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/insights" element={<InsightsScreen />} />
         <Route path="/profile" element={<ProfileScreen />} />
@@ -483,6 +493,7 @@ function AppRoutes() {
         <Route path="/group/:groupId/add-expense" element={<AddExpense />} />
         <Route path="/group/:groupId/balances" element={<Balances />} />
         <Route path="/group/:groupId/settlement" element={<Settlement />} />
+        <Route path="/join/:token" element={<GroupJoin />} />
       </Route>
     </Routes>
   </>;

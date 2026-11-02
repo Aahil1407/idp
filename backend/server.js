@@ -1,4 +1,5 @@
 const express = require("express");
+const crypto = require("crypto");
 const cors = require("cors");
 const databaseConnection = require("./db");
 const { loadGroupBalances } = require("./group-balances");
@@ -386,6 +387,57 @@ app.post("/api/groups/:id/members", (req, res) => {
             });
         }
     );
+});
+
+// CREATE A SHAREABLE, EXPIRING GROUP INVITE
+app.post("/api/groups/:id/invites", (req, res) => {
+    const groupId = req.params.id;
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    db.query("DELETE FROM group_invites WHERE expires_at <= UTC_TIMESTAMP()", (cleanupError) => {
+        if (cleanupError) {
+            console.error("Could not clean up expired group invites:", cleanupError.message);
+            return res.status(503).json({ error: "Unable to create an invite right now." });
+        }
+        db.query(`
+            INSERT INTO group_invites (token_hash, group_id, created_by, expires_at)
+            VALUES (?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 DAY))
+        `, [tokenHash, groupId, req.user.user_id], (insertError) => {
+            if (insertError) {
+                console.error("Could not create group invite:", insertError.message);
+                return res.status(503).json({ error: "Unable to create an invite right now." });
+            }
+            res.status(201).json({ token, expires_in_days: 30 });
+        });
+    });
+});
+
+// JOIN A GROUP THROUGH A VALID SHARE LINK
+app.post("/api/group-invites/:token/join", (req, res) => {
+    const token = String(req.params.token || "");
+    if (!/^[a-f0-9]{64}$/.test(token)) {
+        return res.status(404).json({ error: "This invite link is invalid or has expired." });
+    }
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    db.query(`
+        SELECT group_id FROM group_invites
+        WHERE token_hash = ? AND expires_at > UTC_TIMESTAMP()
+        LIMIT 1
+    `, [tokenHash], (inviteError, rows) => {
+        if (inviteError) {
+            console.error("Could not verify group invite:", inviteError.message);
+            return res.status(503).json({ error: "Unable to verify this invite right now." });
+        }
+        if (!rows.length) return res.status(404).json({ error: "This invite link is invalid or has expired." });
+        const groupId = Number(rows[0].group_id);
+        addGroupMember(db, groupId, req.user.user_id, (joinError) => {
+            if (joinError && !isDuplicateMembershipError(joinError)) {
+                console.error("Could not join group from invite:", joinError.message);
+                return res.status(503).json({ error: "Unable to join this group right now." });
+            }
+            res.json({ group_id: groupId, already_member: Boolean(joinError) });
+        });
+    });
 });
 
 

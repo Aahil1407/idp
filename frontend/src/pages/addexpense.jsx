@@ -17,6 +17,20 @@ async function getResponseError(response, fallback) {
   }
 }
 
+function evenAmountEntries(participantIds, amountPaise) {
+  if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0 || !participantIds.length) return {};
+  const base = Math.floor(amountPaise / participantIds.length);
+  const remainder = amountPaise % participantIds.length;
+  return Object.fromEntries(participantIds.map((id, index) => [id, ((base + (index < remainder ? 1 : 0)) / 100).toFixed(2)]));
+}
+
+function evenPercentageEntries(participantIds) {
+  if (!participantIds.length) return {};
+  const base = Math.floor(10_000 / participantIds.length);
+  const remainder = 10_000 % participantIds.length;
+  return Object.fromEntries(participantIds.map((id, index) => [id, ((base + (index < remainder ? 1 : 0)) / 100).toFixed(2)]));
+}
+
 function AddExpense() {
   const navigate = useNavigate();
   const { groupId } = useParams();
@@ -80,10 +94,38 @@ function AddExpense() {
       ? selectedParticipants.filter((id) => id !== userId)
       : [...selectedParticipants, userId];
     setSelectedParticipants(nextParticipants);
-    setAmountEntries((entries) => syncAllocationEntries(entries, nextParticipants));
-    setPercentageEntries((entries) => syncAllocationEntries(entries, nextParticipants));
+    setAmountEntries((entries) => ({ ...syncAllocationEntries(entries, nextParticipants), ...evenAmountEntries(nextParticipants, amountPaise) }));
+    setPercentageEntries((entries) => ({ ...syncAllocationEntries(entries, nextParticipants), ...evenPercentageEntries(nextParticipants) }));
     setError("");
     setSuccess("");
+  }
+
+  function changeSplitType(type) {
+    setSplitType(type);
+    setError("");
+    if (type === "Exact" || type === "Custom") {
+      setAmountEntries((entries) => ({ ...entries, ...evenAmountEntries(selectedParticipants, amountPaise) }));
+    } else if (type === "Percentage") {
+      setPercentageEntries((entries) => ({ ...entries, ...evenPercentageEntries(selectedParticipants) }));
+    }
+  }
+
+  function adjustAllocation(userId, rawValue) {
+    const currentId = String(userId);
+    const otherIds = selectedParticipants.filter((id) => id !== currentId);
+    const isPercentage = splitType === "Percentage";
+    const total = isPercentage ? 10_000 : amountPaise;
+    if (!Number.isSafeInteger(total) || total <= 0) return;
+    const selected = Number(rawValue);
+    const remainder = total - selected;
+    const base = otherIds.length ? Math.floor(remainder / otherIds.length) : 0;
+    const entries = isPercentage ? { ...percentageEntries, [currentId]: (selected / 100).toFixed(2) } : { ...amountEntries, [currentId]: (selected / 100).toFixed(2) };
+    otherIds.forEach((id, index) => {
+      const portion = base + (index < remainder % Math.max(1, otherIds.length) ? 1 : 0);
+      entries[id] = (portion / 100).toFixed(2);
+    });
+    if (isPercentage) setPercentageEntries(entries);
+    else setAmountEntries(entries);
   }
 
   function retryLoadMembers() {
@@ -244,14 +286,21 @@ function AddExpense() {
                   type="button"
                   key={type}
                   className={splitType === type ? "split-option active" : "split-option"}
-                  onClick={() => { setSplitType(type); setError(""); }}
+                  onClick={() => changeSplitType(type)}
                   disabled={saving}
                 >
-                  {type}
+                  {type === "Percentage" ? "Percent" : type}
                 </button>
               ))}
             </div>
           </div>
+
+          {step === 2 && <div className="split-method-detail">
+            <span>Split type</span>
+            <div className="split-options" role="group" aria-label="Choose expense split type">
+              {["Equal", "Exact", "Custom", "Percentage"].map((type) => <button type="button" key={type} className={splitType === type ? "split-option active" : "split-option"} aria-label={`Split by ${type.toLowerCase()}`} aria-pressed={splitType === type} onClick={() => changeSplitType(type)} disabled={saving}>{type === "Percentage" ? "Percent" : type}</button>)}
+            </div>
+          </div>}
 
           <fieldset className="form-group expense-participants">
             <legend>{step === 1 ? "Select friends" : "Split details"}</legend>
@@ -284,11 +333,17 @@ function AddExpense() {
                   const entryMap = isPercentage ? percentageEntries : amountEntries;
                   const setEntryMap = isPercentage ? setPercentageEntries : setAmountEntries;
                   const fieldError = allocation.fieldErrors[userId];
+                  const currentSplitAmount = allocation.splits.find((split) => String(split.user_id) === userId)?.amount_owed;
+                  const currentPaise = currentSplitAmount === undefined ? (isPercentage ? amountPaise * Number(entryMap[userId] || 0) / 100 : Number.isSafeInteger(parseAmountToPaise(entryMap[userId])) ? parseAmountToPaise(entryMap[userId]) : 0) : Math.round(currentSplitAmount * 100);
+                  const rangeTotal = isPercentage ? 10_000 : amountPaise;
+                  const rangeValue = isPercentage ? Math.round(Number(entryMap[userId] || 0) * 100) : currentPaise;
+                  const rangeMaximum = Number.isSafeInteger(rangeTotal) ? Math.max(1, rangeTotal - Math.max(0, selectedParticipants.length - 1)) : 1;
+                  const rangePercent = rangeTotal > 0 ? Math.min(100, rangeValue / rangeTotal * 100) : 0;
                   return (
                     <div className={fieldError ? "allocation-row allocation-invalid" : "allocation-row"} key={userId}>
                       <div className="allocation-person">
-                        <span className="allocation-person-name">{member?.name || "Group member"}</span>
-                        <span className="allocation-person-label">{isPercentage ? "Share percent" : "Owes"}</span>
+                        <span className="allocation-avatar" aria-hidden="true">{["👩🏻", "👨🏽", "👨🏻", "👩🏾", "👦🏼", "👨🏼"][Number(userId) % 6]}</span>
+                        <span><span className="allocation-person-name">{member?.name || "Group member"}</span><span className="allocation-person-label">{isPercentage ? "Share percent" : "Owes"}</span></span>
                       </div>
                       {splitType === "Equal" ? (
                         <strong className="allocation-equal-share">₹{(allocation.splits.find((split) => String(split.user_id) === userId)?.amount_owed || 0).toFixed(2)}</strong>
@@ -309,6 +364,10 @@ function AddExpense() {
                           }}
                         />
                       </label>}
+                      <div className="allocation-range-wrap">
+                        <div className="allocation-range-track" aria-hidden="true"><span style={{ width: `${rangePercent}%` }} /></div>
+                        <input className="allocation-range" type="range" min="1" max={rangeMaximum} step="1" value={Math.min(rangeMaximum, Math.max(1, rangeValue || 1))} style={{ "--allocation-progress": `${rangePercent}%` }} aria-label={`${member?.name || "Member"} allocation`} aria-valuetext={isPercentage ? `${(rangeValue / 100).toFixed(2)} percent` : `₹${(rangeValue / 100).toFixed(2)}`} disabled={saving || selectedParticipants.length < 2 || splitType === "Equal" || !Number.isSafeInteger(amountPaise)} onChange={(event) => adjustAllocation(userId, event.target.value)} />
+                      </div>
                       {fieldError && <span className="allocation-field-error" role="alert">{fieldError}</span>}
                     </div>
                   );

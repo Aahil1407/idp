@@ -4,10 +4,12 @@
 handoff and a clear build brief for Review 3.
 
 **Last verified update:** 2 November 2026, production test-data cleanup and
-device-account migration verified on Railway.
+device-account migration verified; current UI/invite changes pass local
+lint, build, and test checks. The invite-table migration is still pending.
 
-**Current state:** A complete UI redesign and email/password account
-flows with per-browser sessions are implemented in code. See the
+**Current state:** The redesigned UI and email/password account flows
+with per-browser sessions are implemented. Current work adds reference-led
+group, allocation, profile, landing, and group-list layouts. See the
 "Completed work" and "Remaining work" sections below. The device-account
 migration was applied directly to Railway production and verified. Backend
 health and the frontend-origin CORS preflight also passed; signup itself has
@@ -22,7 +24,7 @@ current verified status here and in "Completed work" takes precedence.
 
 ## Current verified status
 
-### Completed work in `cfa8d12`
+### Completed work based on `cfa8d12`
 
 - Reworked the SmartSplit frontend around floating navigation, glass
   surfaces, responsive layouts, refined states, and theme tokens.
@@ -33,6 +35,14 @@ current verified status here and in "Completed work" takes precedence.
 - Added account registration and sign-in with server-side password
   hashing, per-browser sessions, session revocation, and a profile page
   that manages active devices.
+- Added a dedicated all-groups page, redesigned group details, profile,
+  landing, and expense-allocation screens, plus interactive allocation
+  sliders that rebalance shares.
+- Added expiring group invite URLs. Only token hashes are stored. The new
+  `group_invites` table migration is in the repository but has not been
+  applied to Railway production.
+- Fixed the floating navigation surface so it follows light mode as well
+  as dark mode.
 - Protected API routes with session authentication and group-member
   checks; API client sends the session cookie and browser device ID.
 - Updated balance and settlement handling so settled payments are
@@ -73,22 +83,23 @@ current verified status here and in "Completed work" takes precedence.
 - Earlier commits prepared the frontend/backend for Railway; see
   `git log --oneline` for the full history.
 
-### Verification recorded for this commit
+### Verification for the current UI/invite changes
 
-- `backend`: `npm test` — 33 tests passed.
-- `frontend`: `npm run lint` — passed.
-- `frontend`: `npm run build` — passed.
+- `backend`: `npm test` — 35 tests passed, including invite-link API tests.
+- `frontend`: `npm run lint` — passed; `npm run build` — passed.
 - `frontend`: `node --test test/expense-splits.test.js` — 10 tests passed.
-- These checks include mocked auth/database tests. They do not verify
-  the migration against MySQL, real account email delivery, production
-  behavior, or Railway deployment health.
+- These checks use mocks for database API tests. The new group-invite
+  migration has not been tested/applied against Railway MySQL.
 
 ### Remaining work, in priority order
 
-1. Manually verify registration, login, refresh/session persistence,
+1. Apply `backend/migrations/20261102_add_group_invites.sql` in the
+   intended environment before using invite links there, then test link
+   creation and joining from another account. It is not applied to Railway.
+2. Manually verify registration, login, refresh/session persistence,
    same-device replacement, per-device revocation, logout-all, protected
-   routes, group membership authorization, and profile behavior against
-   that local database.
+   routes, group membership authorization, and profile behavior in the
+   intended deployed environment.
 3. Design a verified activation path for pre-existing `users` rows.
    Their password hashes are NULL; do not let someone claim an existing
    account using only its email. Email verification/password reset are

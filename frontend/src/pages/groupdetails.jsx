@@ -2,16 +2,25 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { apiFetch } from "../config";
+import { useAuth } from "../auth-context";
+
+const money = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value) || 0);
+const memberFaces = ["👨🏻", "👩🏽", "👨🏾", "👩🏻", "👨🏼", "👩🏾"];
 
 function GroupDetails() {
   const navigate = useNavigate();
   const { groupId } = useParams();
+  const { user } = useAuth();
 
   const [group, setGroup] = useState(null);
   const [members, setMembers] = useState([]);
   const [users, setUsers] = useState([]);
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [balances, setBalances] = useState([]);
+  const [activeTab, setActiveTab] = useState("Expenses");
+  const [inviteState, setInviteState] = useState("");
+  const [inviteError, setInviteError] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -43,7 +52,7 @@ function GroupDetails() {
         }
 
         const groupData = await groupResponse.json();
-        const [membersResponse, expensesResponse, usersResponse] = await Promise.all([
+        const [membersResponse, expensesResponse, usersResponse, balancesResponse] = await Promise.all([
           apiFetch(`/api/groups/${groupId}/members`, {
             signal: AbortSignal.timeout(15000),
           }),
@@ -51,6 +60,9 @@ function GroupDetails() {
             signal: AbortSignal.timeout(15000),
           }),
           apiFetch("/api/users", {
+            signal: AbortSignal.timeout(15000),
+          }),
+          apiFetch(`/api/groups/${groupId}/balances`, {
             signal: AbortSignal.timeout(15000),
           }),
         ]);
@@ -65,15 +77,20 @@ function GroupDetails() {
         if (!usersResponse.ok) {
           throw new Error(await responseError(usersResponse, "Failed to load available users."));
         }
+        if (!balancesResponse.ok) {
+          throw new Error(await responseError(balancesResponse, "Failed to load group balances."));
+        }
 
         const membersData = await membersResponse.json();
         const expensesData = await expensesResponse.json();
         const usersData = await usersResponse.json();
+        const balancesData = await balancesResponse.json();
 
         setGroup(groupData);
         setMembers(membersData);
         setUsers(usersData);
         setExpenses(expensesData);
+        setBalances(balancesData);
       } catch (err) {
         console.error(err);
 
@@ -92,6 +109,23 @@ function GroupDetails() {
 
   const memberIds = new Set(members.map((member) => String(member.user_id)));
   const eligibleUsers = users.filter((user) => !memberIds.has(String(user.user_id)));
+  const ownBalance = balances.find((balance) => String(balance.user_id) === String(user?.user_id))?.balance || 0;
+  const outstandingBalance = balances.reduce((sum, balance) => sum + Math.abs(Number(balance.balance || 0)), 0) / 2;
+
+  async function copyInviteLink() {
+    setInviteState("");
+    setInviteError("");
+    try {
+      const response = await apiFetch(`/api/groups/${groupId}/invites`, { method: "POST" });
+      const result = await response.json();
+      if (!response.ok || !result.token) throw new Error(result.error || "Unable to create an invite link.");
+      const inviteUrl = `${window.location.origin}/join/${result.token}`;
+      await navigator.clipboard.writeText(inviteUrl);
+      setInviteState("Invite link copied · expires in 30 days");
+    } catch (error) {
+      setInviteError(error.message || "Unable to copy this invite link. Try again.");
+    }
+  }
 
   function toggleSelectedUser(userId) {
     setSelectedUsers((current) => current.includes(userId)
@@ -218,69 +252,56 @@ function GroupDetails() {
         ←
       </button>
 
-      {/* Header */}
       <div className="group-header">
-        <h1>🏖️ {group.group_name}</h1>
-
-        <p>
-          {members.length} members
-        </p>
+        <h1><span className="group-title-emoji" aria-hidden="true">🏖️</span>{group.group_name}</h1>
+        <div className="group-member-summary">
+          <div className="group-avatar-stack" aria-label={`${members.length} group members`}>
+            {members.slice(0, 4).map((member) => <span className="group-member-avatar" key={member.user_id} title={member.name}>{memberFaces[Number(member.user_id) % memberFaces.length]}</span>)}
+            {members.length > 4 && <span className="group-member-overflow">+{members.length - 4}</span>}
+          </div>
+          <p>{members.length} {members.length === 1 ? "member" : "members"} · Personal</p>
+        </div>
       </div>
 
-      {/* Group info */}
-      <div className="group-balance-card">
-        <p>Group ID</p>
-        <h2>#{group.group_id}</h2>
+      <div className="group-balance-card group-summary-card">
+        <div><p>Group Balance</p><h2>{money(outstandingBalance)}</h2></div>
+        <div className={ownBalance >= 0 ? "group-own-balance is-credit" : "group-own-balance is-debit"}><small>{ownBalance >= 0 ? "You're owed" : "You owe"}</small><strong>{ownBalance >= 0 ? "+ " : "− "}{money(Math.abs(ownBalance))}</strong></div>
       </div>
 
-      {/* Members */}
-      <section className="group-section">
+      <div className="group-content-tabs" role="tablist" aria-label="Group sections">
+        <button type="button" role="tab" aria-selected={activeTab === "Expenses"} className={activeTab === "Expenses" ? "selected" : ""} onClick={() => setActiveTab("Expenses")}>Expenses</button>
+        <button type="button" role="tab" aria-selected={activeTab === "Members"} className={activeTab === "Members" ? "selected" : ""} onClick={() => setActiveTab("Members")}>Members</button>
+        <button type="button" role="tab" onClick={() => navigate(`/group/${groupId}/settlement`)}>Settlements</button>
+      </div>
 
-        <h3>Members</h3>
-
-        {members.length === 0 ? <p className="member-empty">No members yet.</p> : null}
-
-        {members.map((member) => (
-          <div
-            className="balance-row"
-            key={member.user_id}
-          >
-            <div className="balance-person">
-
-              <div className="avatar">
-                {member.name.charAt(0)}
-              </div>
-
-              <span>
-                {member.name}
-              </span>
-
-            </div>
+      {activeTab === "Members" ? <>
+      <section className="group-section group-members-list" role="tabpanel">
+        <h3>Members <span>{members.length}</span></h3>
+        {members.length === 0 ? <p className="member-empty">No members yet.</p> : members.map((member) => (
+          <div className="group-member-row" key={member.user_id}>
+            <span className="group-member-avatar">{memberFaces[Number(member.user_id) % memberFaces.length]}</span>
+            <span>{member.name}{String(member.user_id) === String(user?.user_id) && <small> · You</small>}</span>
+            <span className="group-member-role">{String(member.user_id) === String(group.created_by) ? "Creator" : "Member"}</span>
           </div>
         ))}
-
       </section>
-
-      <section className="group-section add-participants-section">
+      <section className="group-section add-participants-section" role="tabpanel">
         <div className="participants-heading">
           <div>
             <h3>Add Participants</h3>
-            <p>Invite existing SmartSplit users to this group.</p>
+            <p>Share a secure link to invite someone to this group.</p>
           </div>
           <span className="participants-count">{eligibleUsers.length} available</span>
         </div>
 
         {memberError && <p className="member-feedback member-feedback-error" role="alert">{memberError}</p>}
         {memberSuccess && <p className="member-feedback member-feedback-success" role="status">{memberSuccess}</p>}
+        {inviteError && <p className="member-feedback member-feedback-error" role="alert">{inviteError}</p>}
+        {inviteState && <p className="member-feedback member-feedback-success" role="status">{inviteState}</p>}
+        <button className="share-invite-button" type="button" onClick={copyInviteLink}><span aria-hidden="true">⧉</span> Copy invite link</button>
 
         {eligibleUsers.length === 0 ? (
-          <div className="participants-empty" role="status">
-            <span className="participants-empty-icon" aria-hidden="true">✓</span>
-            <div>
-              <strong>{users.length === 0 ? "No users available" : "Everyone is already here"}</strong>
-              <p>{users.length === 0 ? "There are no existing users to add yet." : "All existing users are already members of this group."}</p>
-            </div>
-          </div>
+          <p className="participants-invite-hint">No other accounts to add here yet. New members can join from your invite link.</p>
         ) : (
           <form onSubmit={handleAddParticipants}>
             <div className="participant-picker">
@@ -312,6 +333,16 @@ function GroupDetails() {
           </form>
         )}
       </section>
+      </> : <section className="group-section group-expenses-list" role="tabpanel">
+        <div className="group-section-title"><h3>Expenses</h3><span>{expenses.length} total</span></div>
+        {expenses.length === 0 ? <p className="group-empty-expenses">No expenses yet.</p> : expenses.map((expense, index) => (
+          <article className="group-expense-row" key={expense.expense_id}>
+            <span className="group-expense-avatar">{index % 2 ? "🥗" : "🍽️"}</span>
+            <span className="group-expense-info"><strong>{expense.description}</strong><small>{new Date(expense.expense_date).toLocaleDateString("en-IN", { month: "short", day: "numeric" })} · {members.length} people</small></span>
+            <span className="group-expense-value"><strong>{money(expense.amount)}</strong><small>paid by {expense.paid_by_name}</small></span>
+          </article>
+        ))}
+      </section>}
 
       {/* =========================
           EXPENSES
@@ -372,16 +403,6 @@ function GroupDetails() {
         }
       >
         + Add Expense
-      </button>
-
-      {/* View Balances */}
-      <button
-        className="balances-button"
-        onClick={() =>
-          navigate(`/group/${groupId}/balances`)
-        }
-      >
-        View Balances
       </button>
 
     </div>

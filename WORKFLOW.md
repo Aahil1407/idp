@@ -217,6 +217,9 @@ session flows. The account migration has been applied to Railway
 production after an owner-authorized test-data cleanup and verified local
 SQL export. Production app tables are empty. Existing rows with no
 password hash must not be claimed by email alone.
+The group invite API/UI also require the additive
+`backend/migrations/20261102_add_group_invites.sql` migration, which is
+present in the repository but not yet applied to Railway.
 
 Before building on authentication, review the migration and account
 activation limitations in `truth.md`. Signup/login still need an

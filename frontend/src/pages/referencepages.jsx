@@ -6,6 +6,7 @@ import { useAuth } from "../auth-context";
 const money = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value) || 0);
 
 function useWorkspace() {
+  const { user } = useAuth();
   const [state, setState] = useState({ groups: [], expenses: [], loading: true, error: "" });
   useEffect(() => {
     let active = true;
@@ -15,13 +16,15 @@ function useWorkspace() {
         if (!groupResponse.ok) throw new Error("Unable to load your groups. Check the backend connection.");
         const groups = await groupResponse.json();
         const detailRows = await Promise.all(groups.map(async (group) => {
-          const [membersResponse, expensesResponse] = await Promise.all([
+          const [membersResponse, expensesResponse, balancesResponse] = await Promise.all([
             apiFetch(`/api/groups/${group.group_id}/members`),
             apiFetch(`/api/groups/${group.group_id}/expenses`),
+            apiFetch(`/api/groups/${group.group_id}/balances`),
           ]);
-          if (!membersResponse.ok || !expensesResponse.ok) throw new Error("Unable to load group activity.");
-          const [members, expenses] = await Promise.all([membersResponse.json(), expensesResponse.json()]);
-          return { ...group, members, expenses: expenses.map((item) => ({ ...item, group_name: group.group_name, group_id: group.group_id })) };
+          if (!membersResponse.ok || !expensesResponse.ok || !balancesResponse.ok) throw new Error("Unable to load group activity.");
+          const [members, expenses, balances] = await Promise.all([membersResponse.json(), expensesResponse.json(), balancesResponse.json()]);
+          const personalBalance = balances.find((balance) => String(balance.user_id) === String(user?.user_id))?.balance || 0;
+          return { ...group, members, balance: personalBalance, expenses: expenses.map((item) => ({ ...item, group_name: group.group_name, group_id: group.group_id })) };
         }));
         if (active) setState({ groups: detailRows, expenses: detailRows.flatMap((group) => group.expenses).sort((a, b) => new Date(b.expense_date) - new Date(a.expense_date)), loading: false, error: "" });
       } catch (error) {
@@ -30,7 +33,7 @@ function useWorkspace() {
     }
     load();
     return () => { active = false; };
-  }, []);
+  }, [user?.user_id]);
   return state;
 }
 
@@ -45,6 +48,13 @@ export function HistoryScreen() {
   return <main className="phone-app reference-page"><ScreenHeader eyebrow="Your activity" title="Transaction History" subtitle="Every shared moment, in one place." />
     <div className="history-filter">{["All", "Expenses", "Settlements"].map((item) => <button key={item} className={filter === item ? "selected" : ""} onClick={() => setFilter(item)}>{item}</button>)}</div>
     <section className="reference-list">{loading ? <p className="home-state">Loading transactions…</p> : error ? <p className="home-state home-error">{error}</p> : shownExpenses.length ? shownExpenses.map((expense) => <article className="transaction-row" key={expense.expense_id}><span className="transaction-avatar">₹</span><div><strong>{expense.description}</strong><small>{new Date(expense.expense_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} · {expense.group_name}</small></div><b>{money(expense.amount)}</b></article>) : <p className="home-state">{filter === "Settlements" ? "No settlement history is available here yet." : "Your group expenses will appear here."}</p>}</section>
+  </main>;
+}
+
+export function GroupsScreen() {
+  const { groups, loading, error } = useWorkspace();
+  return <main className="phone-app reference-page groups-page"><ScreenHeader eyebrow="Your shared spaces" title="All groups" subtitle="Open a group to see its people, expenses, and balances." />
+    {loading ? <p className="home-state">Loading your groups…</p> : error ? <p className="home-state home-error" role="alert">{error}</p> : groups.length ? <section className="all-groups-list">{groups.map((group) => <Link className="all-group-card" to={`/group/${group.group_id}`} key={group.group_id}><span className="all-group-mark" aria-hidden="true">👥</span><span className="all-group-copy"><strong>{group.group_name}</strong><small>{group.members.length} {group.members.length === 1 ? "member" : "members"} · {group.expenses.length} {group.expenses.length === 1 ? "expense" : "expenses"}</small></span><span className="all-group-balance"><strong>{money(Math.abs(group.balance))}</strong><small>{group.balance >= 0 ? "You're owed" : "You owe"}</small></span><span className="all-group-chevron" aria-hidden="true">›</span></Link>)}</section> : <section className="groups-empty-state"><span aria-hidden="true">♧</span><h2>No groups yet</h2><p>Create a group or open an invite link to get started.</p><Link to="/personal#groups">Go to home</Link></section>}
   </main>;
 }
 
@@ -75,6 +85,7 @@ export function ProfileScreen() {
   const [sessionError, setSessionError] = useState("");
   const [actionError, setActionError] = useState("");
   const [mode, setMode] = useState(() => document.documentElement.dataset.mode || "light");
+  const totalBalance = groups.reduce((sum, group) => sum + Number(group.balance || 0), 0);
   useEffect(() => {
     let active = true;
     apiFetch("/api/auth/sessions").then(async (response) => {
@@ -100,10 +111,13 @@ export function ProfileScreen() {
     document.querySelector(".appearance-toggle")?.click();
     setMode(next);
   }
-  return <main className="phone-app reference-page profile-page"><ScreenHeader eyebrow="Your space" title="Profile" subtitle="Your SmartSplit preferences." />
-    <section className="profile-card"><span className="profile-avatar">{user?.name?.charAt(0)?.toUpperCase() || "S"}</span><div><strong>{user?.name || "SmartSplit member"}</strong><small>{user?.email || "Personal account"}</small></div><span className="profile-settings" aria-hidden="true">⚙</span></section>
-    {loading && <p className="profile-note">Loading your account…</p>}{error && <p className="profile-note">{error}</p>}
-    <section className="profile-preferences"><h2>Preferences</h2><button onClick={toggleMode}><span>◐</span><span><strong>Appearance</strong><small>{mode === "dark" ? "Dark mode" : "Light mode"}</small></span><i>{mode === "dark" ? "On" : "Off"}</i></button><Link to="/themes"><span>✳</span><span><strong>Theme rotation</strong><small>New palette on each refresh</small></span><i>Auto</i></Link><Link to="/insights"><span>◌</span><span><strong>Spending insights</strong><small>{groups.length} active {groups.length === 1 ? "group" : "groups"}</small></span><i>›</i></Link><Link to="/history"><span>◷</span><span><strong>Transaction history</strong><small>Review shared expenses</small></span><i>›</i></Link></section>
+  return <main className="phone-app reference-page profile-page">
+    <header className="profile-page-header"><h1>Profile</h1><button type="button" aria-label="Profile settings" onClick={() => document.querySelector(".profile-preferences")?.scrollIntoView({ behavior: "smooth" })}>⚙</button></header>
+    <section className="profile-card"><span className="profile-avatar">{user?.name?.charAt(0)?.toUpperCase() || "S"}</span><div><strong>{user?.name || "SmartSplit member"}</strong><small>{user?.email || "Personal account"}</small></div></section>
+    <section className="profile-balance-card"><span>Total balance</span><strong>{money(Math.abs(totalBalance))}</strong><small>{loading ? "Updating from your groups" : totalBalance >= 0 ? "Across your groups · you're owed" : "Across your groups · you owe"}</small><i aria-hidden="true">↗</i></section>
+    {error && <p className="profile-note" role="alert">{error}</p>}
+    <section className="profile-preferences"><h2 className="visually-hidden">Preferences</h2><Link to="/groups"><span>♙</span><span><strong>My Groups</strong></span><i>›</i></Link><button onClick={toggleMode} type="button"><span>◷</span><span><strong>Theme Settings</strong></span><i>{mode === "dark" ? "Dark" : "Light"} · Rotating　›</i></button><Link to="/history"><span>◷</span><span><strong>Transaction History</strong></span><i>›</i></Link><Link to="/insights"><span>ⓘ</span><span><strong>Spending Insights</strong></span><i>›</i></Link><button className="profile-logout-row" type="button" onClick={handleSignOut}><span>⇥</span><span><strong>Log Out</strong></span><i>›</i></button></section>
+    <section className="profile-extra-links"><Link to="/themes">Palette collection <span>›</span></Link></section>
     <section className="profile-devices"><h2>Signed-in devices</h2>{sessionError && <p className="auth-error" role="alert">{sessionError}</p>}{actionError && <p className="auth-error" role="alert">{actionError}</p>}{sessions.map((session) => <div className="device-session" key={session.session_id}><span className="device-icon">▣</span><div><strong>{session.device_name}{session.current ? " · This device" : ""}</strong><small>Last active {new Date(session.last_seen).toLocaleString()}</small></div>{!session.current && <button type="button" onClick={() => removeSession(session.session_id)}>Sign out</button>}</div>)}{!sessions.length && !sessionError && <p className="profile-note">Loading signed-in devices…</p>}<button className="signout-button" type="button" onClick={handleSignOut}>Sign out on this device</button>{sessions.length > 1 && <button className="signout-all-button" type="button" onClick={handleSignOutAll}>Sign out of all devices</button>}{loading && <p className="profile-note">Loading your groups…</p>}{error && <p className="profile-note">{error}</p>}</section>
   </main>;
 }

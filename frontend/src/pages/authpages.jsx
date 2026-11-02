@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth-context";
 
 function AuthPage({ signup = false }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signIn, signUp } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -18,7 +19,7 @@ function AuthPage({ signup = false }) {
     try {
       if (signup) await signUp({ name, email, password });
       else await signIn(email, password);
-      navigate("/personal", { replace: true });
+      navigate(location.state?.from || "/personal", { replace: true });
     } catch (requestError) {
       setError(requestError.message || "Unable to continue. Check the connection and try again.");
     } finally {
