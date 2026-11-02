@@ -1,19 +1,26 @@
 # SmartSplit --- Teammate Workflow Guide
 
-**For Review 3 \| Personal mode first \| Business stays "Coming soon"**
+**Current handoff: 2 November 2026 | Repository branch: `main`**
+
+Start with [`truth.md`](truth.md) for verified project state, completed
+work, and the remaining checklist. The latest implementation is commit
+`cfa8d12` (`Redesign SmartSplit and add device accounts`), pushed to
+`origin/main`. A push may trigger Railway; deployment health has not
+been verified for this commit.
 
 This guide explains how to get the project running locally, work safely
 with GitHub, test changes, and deploy through Railway.
 
 ## 0. Read these two files first
 
-1.  `truth.md` --- project history, known bugs, scope and acceptance
-    checklist.
+1.  `truth.md` --- source of truth for completed work, verified checks,
+    known limitations, and next tasks.
 2.  `WORKFLOW.md` --- this run/development guide.
 
-If `truth.md` is not in the repository, download it from the project
-handoff and place it in the repository root. Do not commit personal
-secrets or credentials.
+Keep both files in the repository root. Update `truth.md` whenever a
+feature, test, migration, deployment, or known issue changes; record
+only work that was actually verified. Do not commit personal secrets or
+credentials.
 
 ## 1. Project details (verify against the checkout)
 
@@ -201,24 +208,18 @@ If rebase reports conflicts, stop and resolve carefully. Do not
 force-push. Never commit `.env`, tokens, passwords, database URLs or
 other secrets. Review `git status` before staging.
 
-## 6. What to build for Review 3
+## 6. Current implementation and next work
 
-Follow `truth.md` as the detailed requirements. Summary: - Landing page:
-**Personal** and **Business** choices. - Personal: polished group
-dashboard with 2--3 realistic groups, member lists, expenses, balances
-and optimized settlements. - Business: placeholder only, labelled
-"Coming soon." - Use the current API/database if supported. No fake
-success messages or totals that contradict the backend. - Make sure
-settled payments affect only the correct group's balances. - Inspect
-existing changes before editing, especially the reported
-group-balance/payment fix.
+The current implementation status and prioritized remaining work live
+in `truth.md`. The latest delivered work includes the SmartSplit UI
+redesign, palette rotation and theme mode controls, and account/device
+session flows. The account migration is present as a file but has **not**
+been applied to any database. Existing users have no password hash and
+must not be claimed by email alone.
 
-Suggested sample group names: - Goa Getaway - Flat Expenses - Weekend
-Hangout
-
-Sample amounts in `truth.md` are examples only. Seed data only once,
-using an idempotent seed script or careful one-time instructions; do not
-duplicate rows on each page load.
+Before building on authentication, review the migration and account
+activation limitations in `truth.md`. Use a local/test database first.
+Do not infer that a push means Railway deployed successfully.
 
 ## 7. Test before pushing
 
@@ -234,11 +235,19 @@ npm run build
 npm test
 ```
 
-Also manually check: - Landing page → Personal route - Landing page →
-Business placeholder - Group list and group details - Add expense and
-refresh - Balances after an expense - Settlement optimization - Mark
-settled, then confirm server response and updated balance -
-Narrow/mobile viewport - Loading and error states
+Last verified for commit `cfa8d12`:
+
+- Backend `npm test`: 33 passed.
+- Frontend `npm run lint`: passed.
+- Frontend `npm run build`: passed.
+- Frontend `node --test test/expense-splits.test.js`: 10 passed.
+
+Re-run checks after changes; these results do not cover later edits. Also
+manually check sign-up/sign-in against a local database after applying
+the migration there, per-device sign-out, protected routes, group
+membership access, expense creation, balances, settlements, mobile
+layout, and loading/error states. Mocked tests and a successful build do
+not prove real-database or production behavior.
 
 Record what was genuinely tested. A successful build does not prove the
 deployed app or production database works.
@@ -262,16 +271,19 @@ logs and fix it; do not claim success until it is healthy.
 
 ## 9. Production database safety --- important
 
-At the last known check: - Railway's Backups page showed **No Backups**
+At the last recorded check: - Railway's Backups page showed **No Backups**
 and said creating new backups required a Pro upgrade. - Railway CLI was
 installed and logged in on the owner's Windows laptop, and the project
 was linked to `valiant-liberation` / `production` / `MySQL`. -
 `railway connect MySQL` could not continue because the MySQL
 command-line client was missing. - A verified SQL export was still
-pending. - The proposed `payments.group_id` migration is additive but
-not idempotent and was not confirmed applied.
+pending. - `backend/README.md` records the full group-payment migration
+as applied and verified in Railway; legacy payment rows remain unassigned.
+The newer device-account migration is not applied to any database and
+requires a duplicate normalized-email preflight before its unique key.
 
-Therefore: - Do **not** run the migration against production until a
+Therefore: - Do **not** rerun the group-payment migration or run the
+new account migration against production until a
 verified export/backup exists and the migration has been reviewed. - Do
 **not** run `backend/schema.sql` against the existing production DB; it
 is intended for a fresh database. - Do **not** enable Railway Public
@@ -280,29 +292,29 @@ settled payment to a group by guessing. - Do not run destructive SQL or
 production data changes without explicit approval. - Never paste
 database credentials into ChatGPT/Codex or commit them.
 
-The immediate Review 3 UI work should not require a production migration
-unless the code audit proves otherwise. Keep schema changes separate
-from UI work.
+Do **not** run `backend/schema.sql` against the existing production DB;
+it is intended for a fresh database. Keep schema changes separate from
+UI work and use a disposable/local database for initial migration and
+account-flow verification.
 
 ## 10. Before the demo
 
-1.  Confirm GitHub contains the intended commit/merged PR.
-2.  Confirm Railway's relevant deployment is healthy.
-3.  Open the deployed app in a fresh browser tab.
-4.  Test Personal → group → expense → balances → settlement.
-5.  Show Business only as "Coming soon."
-6.  Keep a fallback local run ready in case the deployment has a
-    problem.
-7.  Be honest about what is implemented versus planned.
+1. Confirm GitHub contains the intended commit/merged PR.
+2. Confirm Railway's relevant deployment is healthy; do not assume it
+   deployed from a push.
+3. Apply database migrations only under the safeguards in section 9.
+4. Open the deployed app in a fresh browser tab and test the flows
+   listed in `truth.md`.
+5. Keep a fallback local run ready in case the deployment has a problem.
+6. Be clear about account activation and any feature still planned.
 
 ## 11. Completion report to send the owner
 
-When done, report: - Summary of features implemented - Files changed -
-Git branch, commit hash and PR/merge status - Tests/build commands run
-and their actual results - Whether sample data is local/test or
-production - Railway deployment status and URL tested - Any remaining
-bugs or unimplemented items - Explicit confirmation that no production
-migration or destructive database change was run unless authorized
+When done, report the summary and files changed; branch and commit hash;
+tests and their actual results; database/environment used; migration
+status; deployment status and URL actually tested; and remaining work.
+Explicitly say whether any production migration or destructive database
+change was run.
 
 **Golden rule:** audit first, preserve work, test, commit safely, verify
 deployment, and do not touch production schema without a verified backup

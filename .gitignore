@@ -1,8 +1,17 @@
 node_modules/
 dist/
+.vite/
+coverage/
 .env
 .env.*
 !.env.example
 *.pem
 *.key
 *.p12
+*.log
+npm-debug.log*
+.DS_Store
+# Keep local database exports and backups out of Git.
+*.sql.gz
+*.dump
+*.bak
