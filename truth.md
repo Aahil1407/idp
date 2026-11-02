@@ -3,19 +3,18 @@
 **Purpose:** Give the next ChatGPT/Codex session an accurate project
 handoff and a clear build brief for Review 3.
 
-**Last verified update:** 2 November 2026, commit `cfa8d12` on `main`,
-pushed to `origin/main`.
+**Last verified update:** 2 November 2026, production test-data cleanup and
+device-account migration verified on Railway.
 
 **Current state:** A complete UI redesign and email/password account
 flows with per-browser sessions are implemented in code. See the
-"Completed work" and "Remaining work" sections below. Do not treat a
-successful commit or local build as proof of Railway deployment or of
-the device-account migration being applied.
+"Completed work" and "Remaining work" sections below. The device-account
+migration was applied directly to Railway production and verified. Backend
+health and the frontend-origin CORS preflight also passed; signup itself has
+not yet been smoke-tested.
 
-**Immediate goal:** Complete local database setup and end-to-end review
-of account creation, sign-in, profile/device controls, and existing
-expense/group flows. Plan safe account activation for existing users
-before enabling them to sign in.
+**Immediate goal:** Smoke-test new account signup/sign-in, then review
+profile/device controls and authenticated group/expense flows.
 
 **Status note:** Sections below preserve the original Review 3 brief
 and project history. Where that older brief says work is pending, the
@@ -41,18 +40,26 @@ current verified status here and in "Completed work" takes precedence.
   cannot mark the same payment settled twice.
 - Preserved expense split and settlement behavior and added auth tests.
 - Added migration `backend/migrations/20261102_add_device_accounts.sql`
-  and schema/setup documentation. The migration file is **not applied**.
-- A manual, read-only Railway export was saved locally outside the repo.
-  Production schema/data were not changed. The account migration preflight
-  found one normalized-email collision, so the migration remains blocked
-  pending owner review of the affected legacy accounts.
+  and schema/setup documentation. It was applied to Railway production
+  after a verified local SQL export and guarded preflight.
+- The owner explicitly authorized clearing production test data. The
+  exported production rows were confirmed as test data, then cleared in a
+  transaction before the account migration. The app tables now contain
+  zero users, groups, memberships, expenses, splits, and payments.
+- The migration added nullable `password_hash`, a unique email index, and
+  the `user_sessions` table. Duplicate email rows were removed with the
+  authorized test dataset; the post-migration duplicate check returned
+  zero collisions.
+- The verified SQL export is kept locally outside the repository and was
+  not committed or uploaded.
 - The full group-payment migration `20261015_add_group_id_to_payments.sql`
   is recorded in `backend/README.md` as applied and verified on Railway;
   historical payment rows remain unassigned. The `20261016` file is a
   deprecated partial migration and must not be run.
-- The latest redesign/account work did not change production data. We did
-  not manually deploy; any automatic Railway deployment triggered by the
-  GitHub push is unverified.
+- Railway backend health returned HTTP 200. Signup CORS preflight for the
+  hosted frontend returned HTTP 204 with the expected origin and
+  credentials headers. Signup/login writes were not submitted during
+  verification.
 
 ### Recent repository milestones
 
@@ -78,11 +85,7 @@ current verified status here and in "Completed work" takes precedence.
 
 ### Remaining work, in priority order
 
-1. Resolve the normalized-email collision found by the production
-   preflight with the account owner. Do not delete, merge, or rewrite
-   either legacy account by guessing. Then review and apply the account
-   migration; it has not been applied to any database.
-2. Manually verify registration, login, refresh/session persistence,
+1. Manually verify registration, login, refresh/session persistence,
    same-device replacement, per-device revocation, logout-all, protected
    routes, group membership authorization, and profile behavior against
    that local database.
@@ -94,10 +97,7 @@ current verified status here and in "Completed work" takes precedence.
    required before real users use the feature; currently they are not
    implemented. The auth rate limiter is in-process and needs a shared
    store before horizontal scaling.
-5. Confirm Railway deployment health and run production-like smoke tests
-   only after proper staging, migration review, and database backup. The
-   device-account migration and deployment state are not confirmed.
-6. Keep this file current: after each meaningful change, update status,
+5. Keep this file current: after each meaningful change, update status,
    tests, migration/deployment state, and the next actionable items.
 
 ## 1. Project summary
@@ -204,22 +204,20 @@ Frontend settlement screen sends `group_id`. -
 6 backend tests, syntax checks, frontend lint/build, and
 `git diff --check`.
 
-The code and tests are committed. The full group-payment migration is
-recorded in `backend/README.md` as applied and verified in Railway. The
-newer device-account migration is not applied; do not infer that a commit
-applied it. Do not recreate or overwrite uncommitted work.
+The code and tests are committed. Both the full group-payment migration
+and device-account migration are recorded in `backend/README.md` as
+applied and verified in Railway. Do not infer that a commit applied either
+migration. Do not recreate or overwrite uncommitted work.
 
 The migration is additive but not idempotent; apply only once and only
 after human approval and a verified backup/export. Do not run
 `backend/schema.sql` on the existing production DB; it is for a fresh
 database.
 
-Railway backup UI showed "No Backups" and said new backups require a Pro
-upgrade. Railway CLI was installed and login/link succeeded on Windows
-for project `valiant-liberation`, environment `production`, service
-`MySQL`, but `railway connect MySQL` said the MySQL client must be
-installed. A manual SQL export is still pending. Do not enable public
-database access just for this task.
+The Railway backup UI did not offer backups on the current plan. A
+verified SQL export was created locally through the Railway private
+tunnel before the authorized cleanup/migration. It remains outside Git.
+Do not enable public database access just for database administration.
 
 ## 6. Original Personal-mode acceptance checklist
 

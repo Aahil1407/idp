@@ -213,13 +213,15 @@ other secrets. Review `git status` before staging.
 The current implementation status and prioritized remaining work live
 in `truth.md`. The latest delivered work includes the SmartSplit UI
 redesign, palette rotation and theme mode controls, and account/device
-session flows. The account migration is present as a file but has **not**
-been applied to any database. Existing users have no password hash and
-must not be claimed by email alone.
+session flows. The account migration has been applied to Railway
+production after an owner-authorized test-data cleanup and verified local
+SQL export. Production app tables are empty. Existing rows with no
+password hash must not be claimed by email alone.
 
 Before building on authentication, review the migration and account
-activation limitations in `truth.md`. Use a local/test database first.
-Do not infer that a push means Railway deployed successfully.
+activation limitations in `truth.md`. Signup/login still need an
+authenticated smoke test. Do not infer that a push means Railway deployed
+successfully.
 
 ## 7. Test before pushing
 
@@ -271,20 +273,19 @@ logs and fix it; do not claim success until it is healthy.
 
 ## 9. Production database safety --- important
 
-At the last recorded check: - Railway's Backups page showed **No Backups**
-and said creating new backups required a Pro upgrade. - Railway CLI was
-installed and logged in on the owner's Windows laptop, and the project
-was linked to `valiant-liberation` / `production` / `MySQL`. -
-`railway connect MySQL` could not continue because the MySQL
-command-line client was missing. - A verified SQL export was still
-pending. - `backend/README.md` records the full group-payment migration
-as applied and verified in Railway; legacy payment rows remain unassigned.
-The newer device-account migration is not applied to any database and
-requires a duplicate normalized-email preflight before its unique key.
+At the latest verified check: Railway CLI accessed the production MySQL
+service through its private tunnel. Earlier, the Railway Backups page
+showed no backups on the current plan. -
+Railway access was completed through the private tunnel and a verified SQL
+export was saved locally outside the repository. `backend/README.md` records
+the full group-payment migration as applied; historical payment rows remain
+unassigned. The device-account migration is also applied and verified.
+The device-account migration was applied after the production test-data
+cleanup and verified SQL export. Its unique email index and `user_sessions`
+table are present; do not rerun it. The production app tables are empty.
 
-Therefore: - Do **not** rerun the group-payment migration or run the
-new account migration against production until a
-verified export/backup exists and the migration has been reviewed. - Do
+Therefore: - Do **not** rerun either already-applied migration. A verified
+export is kept locally. - Do
 **not** run `backend/schema.sql` against the existing production DB; it
 is intended for a fresh database. - Do **not** enable Railway Public
 Access just to make the migration easier. - Do not assign the old
