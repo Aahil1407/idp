@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { API_URL } from "../config";
+import { apiFetch } from "../config";
 
 const formatAmount = (amount) => new Intl.NumberFormat("en-IN", {
   style: "currency", currency: "INR", maximumFractionDigits: 2,
@@ -23,7 +23,7 @@ function Settlement() {
       try {
         setLoading(true);
         setLoadError("");
-        const response = await fetch(`${API_URL}/api/groups/${groupId}/settlements/optimize`, {
+        const response = await apiFetch(`/api/groups/${groupId}/settlements/optimize`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
         });
@@ -48,7 +48,7 @@ function Settlement() {
 
       let paymentId = paymentIds[key];
       if (!paymentId) {
-        const createResponse = await fetch(`${API_URL}/api/settlements/pay`, {
+        const createResponse = await apiFetch("/api/settlements/pay", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -65,7 +65,7 @@ function Settlement() {
         setPaymentIds((current) => ({ ...current, [key]: paymentId }));
       }
 
-      const settleResponse = await fetch(`${API_URL}/api/settlements/${paymentId}/settle`, {
+      const settleResponse = await apiFetch(`/api/settlements/${paymentId}/settle`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
       });

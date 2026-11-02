@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { API_URL } from "../config";
+import { apiFetch } from "../config";
 import {
   calculateExpenseSplits,
   parseAmountToPaise,
@@ -35,10 +35,11 @@ function AddExpense() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [step, setStep] = useState(1);
 
   const loadMembers = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}/api/groups/${groupId}/members`, {
+      const response = await apiFetch(`/api/groups/${groupId}/members`, {
         signal: AbortSignal.timeout(15000),
       });
       if (!response.ok) {
@@ -110,6 +111,11 @@ function AddExpense() {
       return;
     }
 
+    if (step === 1) {
+      setStep(2);
+      return;
+    }
+
     if (allocation.totalError || allocation.splits.length !== selectedParticipants.length) {
       setError(allocation.totalError || "Review participant allocations before saving.");
       return;
@@ -125,7 +131,7 @@ function AddExpense() {
         splits,
       };
 
-      const response = await fetch(`${API_URL}/api/groups/${groupId}/expenses`, {
+      const response = await apiFetch(`/api/groups/${groupId}/expenses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(expenseData),
@@ -179,15 +185,17 @@ function AddExpense() {
       <button className="back-button" onClick={() => navigate(`/group/${groupId}`)}>←</button>
 
       <div className="page-header">
-        <h1>Add Expense</h1>
-        <p>Group #{groupId}</p>
+          <h1>{step === 1 ? "Add Expense" : "Add Details"}</h1>
+          <p>{step === 1 ? `Group #${groupId}` : `${selectedParticipants.length} ${selectedParticipants.length === 1 ? "person" : "people"} · ${splitType} split`}</p>
       </div>
 
       {members.length === 0 ? (
         <p className="expense-state-message" role="alert">This group has no members yet. Add a participant before recording an expense.</p>
       ) : (
-        <form onSubmit={handleAddExpense} noValidate>
-          <div className="form-group">
+        <form className={step === 1 ? "expense-form form-step-entry" : "expense-form form-step-details"} onSubmit={handleAddExpense} noValidate>
+          {step === 2 && <section className="expense-detail-summary"><div><span>{description}</span><small>{members.find((member) => String(member.user_id) === paidBy)?.name ? `Paid by ${members.find((member) => String(member.user_id) === paidBy).name}` : "Shared expense"}</small></div><strong>₹{(amountPaise / 100).toFixed(2)}</strong></section>}
+
+          <div className="form-group expense-entry-field">
             <label htmlFor="expense-description">Expense name</label>
             <input
               id="expense-description"
@@ -200,7 +208,7 @@ function AddExpense() {
             />
           </div>
 
-          <div className="form-group">
+          <div className="form-group expense-entry-field">
             <label htmlFor="expense-amount">Amount</label>
             <div className="amount-input">
               <span aria-hidden="true">₹</span>
@@ -217,7 +225,7 @@ function AddExpense() {
             </div>
           </div>
 
-          <div className="form-group">
+          <div className="form-group expense-entry-field">
             <label htmlFor="expense-payer">Paid by</label>
             <p className="expense-field-hint">Choose the group member who paid. This does not select them as a participant.</p>
             <select id="expense-payer" value={paidBy} onChange={(event) => setPaidBy(event.target.value)} disabled={saving}>
@@ -228,7 +236,7 @@ function AddExpense() {
             </select>
           </div>
 
-          <div className="form-group">
+          <div className="form-group expense-entry-field">
             <label>Split method</label>
             <div className="split-options">
               {["Equal", "Exact", "Percentage", "Custom"].map((type) => (
@@ -246,9 +254,9 @@ function AddExpense() {
           </div>
 
           <fieldset className="form-group expense-participants">
-            <legend>Participants</legend>
-            <p className="expense-field-hint">Select who shares this expense. The payer is included only if you select them here.</p>
-            <div className="participants">
+            <legend>{step === 1 ? "Select friends" : "Split details"}</legend>
+            {step === 1 && <p className="expense-field-hint">Select who shares this expense. The payer is included only if you select them here.</p>}
+            {step === 1 && <div className="participants expense-entry-field">
               {members.map((member) => {
                 const userId = String(member.user_id);
                 const checked = selectedParticipants.includes(userId);
@@ -266,9 +274,9 @@ function AddExpense() {
                   </label>
                 );
               })}
-            </div>
+            </div>}
 
-            {selectedParticipants.length > 0 && splitType !== "Equal" && (
+            {selectedParticipants.length > 0 && step === 2 && (
               <div className="allocation-list">
                 {selectedParticipants.map((userId) => {
                   const member = members.find((item) => String(item.user_id) === userId);
@@ -282,7 +290,9 @@ function AddExpense() {
                         <span className="allocation-person-name">{member?.name || "Group member"}</span>
                         <span className="allocation-person-label">{isPercentage ? "Share percent" : "Owes"}</span>
                       </div>
-                      <label className="allocation-input-wrap">
+                      {splitType === "Equal" ? (
+                        <strong className="allocation-equal-share">₹{(allocation.splits.find((split) => String(split.user_id) === userId)?.amount_owed || 0).toFixed(2)}</strong>
+                      ) : <label className="allocation-input-wrap">
                         <span className="allocation-input-prefix" aria-hidden="true">{isPercentage ? "%" : "₹"}</span>
                         <input
                           aria-label={`${isPercentage ? "Percentage" : "Exact amount"} for ${member?.name || "participant"}`}
@@ -298,7 +308,7 @@ function AddExpense() {
                             setError("");
                           }}
                         />
-                      </label>
+                      </label>}
                       {fieldError && <span className="allocation-field-error" role="alert">{fieldError}</span>}
                     </div>
                   );
@@ -306,7 +316,7 @@ function AddExpense() {
               </div>
             )}
 
-            {selectedParticipants.length > 0 && (
+            {selectedParticipants.length > 0 && step === 2 && (
               <div className={allocation.totalError ? "allocation-total allocation-total-invalid" : "allocation-total allocation-total-valid"} aria-live="polite">
                 {splitType === "Percentage" ? (
                   <>
@@ -334,8 +344,9 @@ function AddExpense() {
           {error && <p className="expense-state-message expense-state-error" role="alert">{error}</p>}
           {success && <p className="expense-state-message expense-state-success" role="status">{success}</p>}
 
+          {step === 2 && <button type="button" className="expense-review-back" onClick={() => setStep(1)} disabled={saving}>← Edit expense</button>}
           <button type="submit" className="add-expense-button submit-expense" disabled={saving}>
-            {saving ? <><span className="group-spinner" aria-hidden="true" /> Saving expense…</> : "Add Expense"}
+            {saving ? <><span className="group-spinner" aria-hidden="true" /> Saving expense…</> : step === 1 ? "Next →" : "Add Expense"}
           </button>
         </form>
       )}

@@ -8,6 +8,7 @@ const { calculateGroupBalances, EXPENSE_BALANCES_SQL, SETTLED_PAYMENTS_SQL } = r
 let server;
 let baseUrl;
 let originalDatabase;
+let originalAuthDisabled;
 let payments;
 let insertValues;
 
@@ -90,6 +91,8 @@ function jsonBody(body) {
 
 before(async () => {
   originalDatabase = app.locals.database;
+  originalAuthDisabled = app.locals.authDisabled;
+  app.locals.authDisabled = true;
   server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -97,6 +100,7 @@ before(async () => {
 
 after(async () => {
   app.locals.database = originalDatabase;
+  app.locals.authDisabled = originalAuthDisabled;
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 });
 

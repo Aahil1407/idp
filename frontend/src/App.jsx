@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, useNavigate, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, Link, useLocation, Navigate, Outlet } from "react-router-dom";
 import "./App.css";
 
-import { API_URL } from "./config";
+import { apiFetch } from "./config";
+import { AuthProvider } from "./auth";
+import { useAuth } from "./auth-context";
+import { LoginPage, SignupPage } from "./pages/authpages";
 import GroupDetails from "./pages/groupdetails";
 import AddExpense from "./pages/addexpense";
 import Balances from "./pages/balances";
 import Settlement from "./pages/settlement";
+import { HistoryScreen, InsightsScreen, ProfileScreen, ThemeScreen } from "./pages/referencepages";
 
 const formatAmount = (amount) =>
   new Intl.NumberFormat("en-IN", {
@@ -32,22 +36,21 @@ async function responseError(response, fallback) {
 
 function Home() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [groups, setGroups] = useState([]);
   const [recentExpenses, setRecentExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
-  const [users, setUsers] = useState([]);
-  const [creatorId, setCreatorId] = useState("");
-  const [usersLoading, setUsersLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createSuccess, setCreateSuccess] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const loadGroups = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}/api/groups`);
+      const response = await apiFetch("/api/groups");
       if (!response.ok) {
         throw new Error(await responseError(response, "Unable to load groups."));
       }
@@ -56,8 +59,8 @@ function Home() {
       const groupSummaries = await Promise.all(
         groupRows.map(async (group) => {
           const [membersResponse, expensesResponse] = await Promise.all([
-            fetch(`${API_URL}/api/groups/${group.group_id}/members`),
-            fetch(`${API_URL}/api/groups/${group.group_id}/expenses`),
+            apiFetch(`/api/groups/${group.group_id}/members`),
+            apiFetch(`/api/groups/${group.group_id}/expenses`),
           ]);
 
           if (!membersResponse.ok) {
@@ -105,32 +108,6 @@ function Home() {
     loadGroups();
   }, [loadGroups]);
 
-  useEffect(() => {
-    if (!createOpen) return undefined;
-
-    let active = true;
-    async function loadUsers() {
-      try {
-        const response = await fetch(`${API_URL}/api/users`);
-        if (!response.ok) {
-          throw new Error(await responseError(response, "Unable to load available users."));
-        }
-        const rows = await response.json();
-        if (!active) return;
-        setUsers(rows);
-        setCreatorId((current) => rows.some((user) => String(user.user_id) === current) ? current : "");
-        if (rows.length === 0) setCreateError("Create a user first, then choose them as the group creator.");
-      } catch (loadError) {
-        if (active) setCreateError(loadError.message || "Unable to load available users.");
-      } finally {
-        if (active) setUsersLoading(false);
-      }
-    }
-
-    loadUsers();
-    return () => { active = false; };
-  }, [createOpen]);
-
   async function handleCreateGroup(event) {
     event.preventDefault();
     const normalizedName = groupName.trim();
@@ -138,19 +115,14 @@ function Home() {
       setCreateError("Enter a group name to continue.");
       return;
     }
-    if (!creatorId) {
-      setCreateError("Choose an existing user as the group creator.");
-      return;
-    }
-
     try {
       setCreating(true);
       setCreateError("");
       setCreateSuccess("");
-      const response = await fetch(`${API_URL}/api/groups`, {
+      const response = await apiFetch("/api/groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ group_name: normalizedName, created_by: Number(creatorId) }),
+        body: JSON.stringify({ group_name: normalizedName }),
       });
       if (!response.ok) {
         throw new Error(await responseError(response, "Unable to create the group."));
@@ -172,7 +144,7 @@ function Home() {
   }, 0) / 100;
 
   return (
-    <div className="phone-app">
+    <div className="phone-app dashboard-page">
       <header className="header">
         <div className="brand">
           <div className="brand-icon">✦</div>
@@ -185,24 +157,21 @@ function Home() {
       <Link className="mode-back-link" to="/">← All SmartSplit modes</Link>
 
       <section className="greeting">
-        <h2>SmartSplit</h2>
-        <p>Your groups and shared expenses</p>
-      </section>
+  <p className="dashboard-eyebrow">PERSONAL SPACE <span /> OVERVIEW</p>
+  <h2>Good morning,<br />{user?.name || "welcome back"}.</h2>
+  <p>Your groups and shared expenses, all in one place.</p>
+</section>
 
-      <section className="overview-card">
-        <div className="overview-item">
-          <p>Groups</p>
-          <h1>{groups.length}</h1>
-        </div>
-        <div className="overview-item">
-          <p>Total spent</p>
-          <h1>{formatAmount(totalSpent)}</h1>
-        </div>
-      </section>
+      <label className="dashboard-search"><span aria-hidden="true">⌕</span><input aria-label="Search groups and expenses" placeholder="Search groups, expenses…" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /><span aria-hidden="true">⌕</span></label>
+
+      <section className="overview-card" id="overview" aria-label="Spending overview">
+  <div className="overview-item overview-primary"><p>Total shared spending</p><h1>{formatAmount(totalSpent)}</h1><span className="overview-footnote">Across all your groups</span></div>
+  <div className="overview-item overview-secondary"><span className="overview-stat-icon" aria-hidden="true">▦</span><p>Active groups</p><h2>{groups.length}</h2></div>
+  <span className="overview-orbit" aria-hidden="true" />
+</section>
 
       <button className="create-group-trigger" type="button" onClick={() => {
         setCreateOpen(true);
-        setUsersLoading(true);
         setCreateError("");
         setCreateSuccess("");
       }}>
@@ -220,22 +189,16 @@ function Home() {
             <div className="group-dialog-mark" aria-hidden="true">✦</div>
             <p className="group-dialog-eyebrow">A new shared space</p>
             <h2 id="create-group-title">Create a group</h2>
-            <p className="group-dialog-copy">Give your group a name and choose who is creating it.</p>
+            <p className="group-dialog-copy">Give your group a name. Your profile will be added as its creator.</p>
 
             <form onSubmit={handleCreateGroup}>
               <label className="group-field-label" htmlFor="new-group-name">Group name</label>
               <input id="new-group-name" className="group-field" autoFocus maxLength={255} placeholder="e.g. Goa weekend" value={groupName} onChange={(event) => setGroupName(event.target.value)} disabled={creating} />
 
-              <label className="group-field-label" htmlFor="group-creator">Created by</label>
-              <select id="group-creator" className="group-field" value={creatorId} onChange={(event) => setCreatorId(event.target.value)} disabled={creating || usersLoading || users.length === 0}>
-                <option value="">{usersLoading ? "Loading users…" : users.length === 0 ? "No users available" : "Choose an existing user"}</option>
-                {users.map((user) => <option value={user.user_id} key={user.user_id}>{user.name}{user.email ? ` · ${user.email}` : ""}</option>)}
-              </select>
-
               {createError && <p className="group-form-message group-form-error" role="alert">{createError}</p>}
               {createSuccess && <p className="group-form-message group-form-success" role="status">{createSuccess}</p>}
 
-              <button className="group-create-submit" type="submit" disabled={creating || usersLoading || users.length === 0}>
+              <button className="group-create-submit" type="submit" disabled={creating}>
                 {creating ? <><span className="group-spinner" aria-hidden="true" /> Creating your group…</> : "Create group"}
               </button>
             </form>
@@ -243,8 +206,9 @@ function Home() {
         </div>
       )}
 
-      <section className="section">
-        <h3>Your Groups</h3>
+      <div className="dashboard-grid">
+      <section className="section groups-panel" id="groups">
+        <div className="section-heading"><h3>Your Groups</h3><span>{groups.length ? `${groups.length} groups` : "See all →"}</span></div>
         {loading ? (
           <p className="home-state" role="status">Loading groups…</p>
         ) : error ? (
@@ -253,7 +217,7 @@ function Home() {
           <p className="home-state" role="status">No groups are available yet.</p>
         ) : (
           <div className="groups-scroll">
-            {groups.map((group) => (
+            {groups.filter((group) => group.group_name.toLowerCase().includes(searchQuery.toLowerCase())).map((group) => (
               <button
                 className="group-card"
                 key={group.group_id}
@@ -275,14 +239,14 @@ function Home() {
         )}
       </section>
 
-      <section className="section activity-section">
-        <h3>Recent Activity</h3>
+      <section className="section activity-section" id="activity">
+        <div className="section-heading"><h3>Recent Activity</h3><Link to="/history">See all →</Link></div>
         {loading ? (
           <p className="home-state" role="status">Loading expenses…</p>
-        ) : error ? null : recentExpenses.length === 0 ? (
+        ) : error ? null : recentExpenses.filter((expense) => `${expense.description} ${expense.group_name}`.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
           <p className="home-state" role="status">No expenses yet.</p>
         ) : (
-          recentExpenses.map((expense) => (
+          recentExpenses.filter((expense) => `${expense.description} ${expense.group_name}`.toLowerCase().includes(searchQuery.toLowerCase())).map((expense) => (
             <div className="activity-row" key={expense.expense_id}>
               <div className="activity-icon" aria-hidden="true">₹</div>
               <div className="activity-info">
@@ -294,6 +258,7 @@ function Home() {
           ))
         )}
       </section>
+      </div>
     </div>
   );
 }
@@ -301,6 +266,7 @@ function Home() {
 function ModeChoice() {
   return (
     <main className="phone-app mode-page">
+      <Link className="mode-back-link" to="/">←</Link>
       <header className="header">
         <div className="brand">
           <div className="brand-icon" aria-hidden="true">✦</div>
@@ -337,26 +303,189 @@ function BusinessComingSoon() {
         <p className="mode-eyebrow">Business</p>
         <h1>Coming soon</h1>
         <p>Business expense management is planned for a future release.</p>
-        <Link className="mode-return-button" to="/">Back to mode choice</Link>
+        <Link className="mode-return-button" to="/choose">Back to mode choice</Link>
       </section>
     </main>
   );
 }
 
+function Welcome() {
+  const { user } = useAuth();
+  return (
+    <main className="phone-app welcome-page">
+      <div className="welcome-orb welcome-orb-one" aria-hidden="true" />
+      <div className="welcome-orb welcome-orb-two" aria-hidden="true" />
+      <div className="welcome-orb welcome-orb-three" aria-hidden="true" />
+      <div className="welcome-brand-mark" aria-hidden="true">S</div>
+      <div className="welcome-wordmark">Smart<span>Split</span></div>
+      <p className="welcome-tagline">Split bills. Build memories.</p>
+      <div className="welcome-bottom">
+        <p>Smarter spending<br />for better moments.</p>
+        <Link className="welcome-cta" to={user ? "/personal" : "/signup"}>{user ? "Continue" : "Get Started"} <span aria-hidden="true">→</span></Link>
+        {!user && <Link className="welcome-login-link" to="/login">I already have an account · Sign in</Link>}
+        <span className="welcome-pagination" aria-hidden="true"><i /><i /><i /></span>
+      </div>
+    </main>
+  );
+}
+
+const PALETTES = ["obsidian", "arctic", "emerald", "amethyst", "rose", "cyan", "sunset", "crimson"];
+const PALETTE_LABELS = {
+  obsidian: "Obsidian Gold", arctic: "Arctic Blue", emerald: "Emerald", amethyst: "Amethyst",
+  rose: "Rose Quartz", cyan: "Cyber Cyan", sunset: "Sunset Amber", crimson: "Crimson",
+};
+const LAST_PALETTE_KEY = "smartsplit:previous-palette";
+
+function ThemeShuffle() {
+  const [theme, setTheme] = useState(() => document.documentElement.dataset.theme || "obsidian");
+
+  function shuffleTheme() {
+    let previous = "";
+    try { previous = window.localStorage.getItem(LAST_PALETTE_KEY) || ""; } catch { /* Storage can be disabled. */ }
+    const choices = PALETTES.filter((palette) => palette !== theme && palette !== previous);
+    const next = choices[Math.floor(Math.random() * choices.length)] || PALETTES.find((palette) => palette !== theme);
+    if (!next) return;
+    const applyTheme = () => {
+      document.documentElement.dataset.theme = next;
+      setTheme(next);
+    };
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (document.startViewTransition && !prefersReducedMotion) {
+      document.startViewTransition(applyTheme);
+    } else {
+      applyTheme();
+    }
+    try { window.localStorage.setItem(LAST_PALETTE_KEY, next); } catch { /* The theme still works for this visit. */ }
+  }
+
+  return (
+    <button className="theme-shuffle" type="button" onClick={shuffleTheme} aria-label={`Change colour theme. Current palette: ${PALETTE_LABELS[theme]}`} title={`Current palette: ${PALETTE_LABELS[theme]}`}>
+      <span className="theme-shuffle-icon" aria-hidden="true">✳</span>
+      <span>{PALETTE_LABELS[theme]}</span>
+      <span aria-hidden="true">↻</span>
+    </button>
+  );
+}
+
+const APPEARANCE_KEY = "smartsplit:appearance";
+
+function AppearanceToggle() {
+  const [mode, setMode] = useState(() => document.documentElement.dataset.mode || "light");
+
+  function toggleMode() {
+    const nextMode = mode === "dark" ? "light" : "dark";
+    const applyMode = () => {
+      document.documentElement.dataset.mode = nextMode;
+      setMode(nextMode);
+    };
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (document.startViewTransition && !prefersReducedMotion) {
+      document.startViewTransition(applyMode);
+    } else {
+      applyMode();
+    }
+    try { window.localStorage.setItem(APPEARANCE_KEY, nextMode); } catch { /* The choice remains active for this visit. */ }
+  }
+
+  const nextLabel = mode === "dark" ? "Light" : "Dark";
+  return (
+    <button className="appearance-toggle" type="button" onClick={toggleMode} aria-label={`Switch to ${nextLabel} mode`} title={`Switch to ${nextLabel} mode`}>
+      <span aria-hidden="true">{mode === "dark" ? "☼" : "☾"}</span>
+      <span>{mode === "dark" ? "Dark" : "Light"}</span>
+    </button>
+  );
+}
+function FloatingNavigation() {
+  const { pathname, hash } = useLocation();
+  const { user } = useAuth();
+  const groupId = pathname.match(/^\/group\/([^/]+)/)?.[1];
+
+  if (!user) return null;
+  if (pathname === "/personal" || ["/history", "/insights", "/profile", "/themes"].includes(pathname)) {
+    const sections = [
+      { id: "/personal#overview", label: "Home", icon: "⌂" },
+      { id: "/personal#groups", label: "Groups", icon: "♧" },
+      { id: "/history", label: "History", icon: "◷" },
+      { id: "/insights", label: "Insights", icon: "◌" },
+      { id: "/profile", label: "Profile", icon: "●" },
+    ];
+    return (
+      <nav className="floating-navigation" aria-label="Dashboard navigation">
+        {sections.map((item) => (
+          <Link className={(pathname === item.id.split("#")[0] && (item.id.includes("#") ? hash === item.id.split("#")[1] || (!hash && item.id.endsWith("overview")) : true)) ? "floating-nav-item active" : "floating-nav-item"} to={item.id} key={item.id}>
+            <span className="floating-nav-icon" aria-hidden="true">{item.icon}</span>
+            <span>{item.label}</span>
+          </Link>
+        ))}
+      </nav>
+    );
+  }
+
+  if (!groupId) return null;
+  const items = [
+    { path: `/group/${groupId}`, label: "Group", icon: "⌂" },
+    { path: `/group/${groupId}/add-expense`, label: "Expense", icon: "+" },
+    { path: `/group/${groupId}/balances`, label: "Balances", icon: "◉" },
+    { path: `/group/${groupId}/settlement`, label: "Settle", icon: "⇄" },
+  ];
+  return (
+    <nav className="floating-navigation" aria-label="Group navigation">
+      {items.map((item) => (
+        <Link
+          className={pathname === item.path ? "floating-nav-item active" : "floating-nav-item"}
+          to={item.path}
+          key={item.path}
+          aria-current={pathname === item.path ? "page" : undefined}
+        >
+          <span className="floating-nav-icon" aria-hidden="true">{item.icon}</span>
+          <span>{item.label}</span>
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+function RequireAuth() {
+  const { user, ready } = useAuth();
+  if (!ready) return <main className="phone-app auth-loading" role="status">Checking your sign-in…</main>;
+  if (!user) return <Navigate to="/login" replace />;
+  return <Outlet />;
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<ModeChoice />} />
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
+
+function AppRoutes() {
+  const { user } = useAuth();
+  return <>
+    {user && <div className="top-controls"><AppearanceToggle /><ThemeShuffle /></div>}
+    <FloatingNavigation />
+    <Routes>
+      <Route path="/" element={<Welcome />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignupPage />} />
+      <Route element={<RequireAuth />}>
+        <Route path="/choose" element={<ModeChoice />} />
         <Route path="/personal" element={<Home />} />
+        <Route path="/history" element={<HistoryScreen />} />
+        <Route path="/insights" element={<InsightsScreen />} />
+        <Route path="/profile" element={<ProfileScreen />} />
+        <Route path="/themes" element={<ThemeScreen />} />
         <Route path="/business" element={<BusinessComingSoon />} />
         <Route path="/group/:groupId" element={<GroupDetails />} />
         <Route path="/group/:groupId/add-expense" element={<AddExpense />} />
         <Route path="/group/:groupId/balances" element={<Balances />} />
         <Route path="/group/:groupId/settlement" element={<Settlement />} />
-      </Routes>
-    </BrowserRouter>
-  );
+      </Route>
+    </Routes>
+  </>;
 }
 
 export default App;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { API_URL } from "../config";
+import { apiFetch } from "../config";
 
 function GroupDetails() {
   const navigate = useNavigate();
@@ -35,7 +35,7 @@ function GroupDetails() {
           return body.error || body.message || fallback;
         };
 
-        const groupResponse = await fetch(`${API_URL}/api/groups/${groupId}`, {
+        const groupResponse = await apiFetch(`/api/groups/${groupId}`, {
           signal: AbortSignal.timeout(15000),
         });
         if (!groupResponse.ok) {
@@ -44,13 +44,13 @@ function GroupDetails() {
 
         const groupData = await groupResponse.json();
         const [membersResponse, expensesResponse, usersResponse] = await Promise.all([
-          fetch(`${API_URL}/api/groups/${groupId}/members`, {
+          apiFetch(`/api/groups/${groupId}/members`, {
             signal: AbortSignal.timeout(15000),
           }),
-          fetch(`${API_URL}/api/groups/${groupId}/expenses`, {
+          apiFetch(`/api/groups/${groupId}/expenses`, {
             signal: AbortSignal.timeout(15000),
           }),
-          fetch(`${API_URL}/api/users`, {
+          apiFetch("/api/users", {
             signal: AbortSignal.timeout(15000),
           }),
         ]);
@@ -102,7 +102,7 @@ function GroupDetails() {
   }
 
   async function refreshMembers() {
-    const response = await fetch(`${API_URL}/api/groups/${groupId}/members`);
+    const response = await apiFetch(`/api/groups/${groupId}/members`);
     if (!response.ok) {
       throw new Error("The member list could not be refreshed. Reload the page to check the latest membership.");
     }
@@ -122,7 +122,7 @@ function GroupDetails() {
 
     try {
       for (const userId of selectedUsers) {
-        const response = await fetch(`${API_URL}/api/groups/${groupId}/members`, {
+        const response = await apiFetch(`/api/groups/${groupId}/members`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: Number(userId) }),

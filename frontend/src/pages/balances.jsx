@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { API_URL, CURRENT_USER_ID } from "../config";
+import { apiFetch } from "../config";
+import { useAuth } from "../auth-context";
 
 function Balances() {
   const navigate = useNavigate();
   const { groupId } = useParams();
+  const { user } = useAuth();
 
   const [balances, setBalances] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,9 +22,7 @@ function Balances() {
         setLoading(true);
         setError("");
 
-        const response = await fetch(
-          `${API_URL}/api/groups/${groupId}/balances`
-        );
+        const response = await apiFetch(`/api/groups/${groupId}/balances`);
 
         if (!response.ok) {
           throw new Error("Failed to load balances.");
@@ -88,11 +88,7 @@ function Balances() {
   // FIND YOUR BALANCE
   // =========================
 
-  // Temporary development assumption:
-  // Sid is user_id 1 in the current backend database.
-    const currentUser = balances.find(
-  (person) => person.user_id === CURRENT_USER_ID
-);
+  const currentUser = balances.find((person) => Number(person.user_id) === Number(user?.user_id));
 
 const yourBalance = currentUser?.balance ?? 0;
 

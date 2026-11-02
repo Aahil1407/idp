@@ -5,11 +5,12 @@ CREATE TABLE IF NOT EXISTS users (
     user_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(320) NOT NULL,
+    password_hash VARCHAR(255) NULL,
     phone VARCHAR(32) NULL,
     upi_id VARCHAR(255) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id),
-    KEY idx_users_email (email)
+    UNIQUE KEY uq_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS groups_table (
@@ -90,4 +91,21 @@ CREATE TABLE IF NOT EXISTS payments (
         REFERENCES group_members (group_id, user_id) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_payments_to_group_member FOREIGN KEY (group_id, to_user)
         REFERENCES group_members (group_id, user_id) ON UPDATE CASCADE ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+    session_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id INT UNSIGNED NOT NULL,
+    device_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    device_name VARCHAR(100) NOT NULL,
+    token_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    PRIMARY KEY (session_id),
+    UNIQUE KEY uq_user_sessions_token_hash (token_hash),
+    UNIQUE KEY uq_user_sessions_user_device (user_id, device_id),
+    KEY idx_user_sessions_expiry (expires_at),
+    CONSTRAINT fk_user_sessions_user FOREIGN KEY (user_id)
+        REFERENCES users (user_id) ON UPDATE CASCADE ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

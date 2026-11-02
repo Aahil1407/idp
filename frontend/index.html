@@ -4,7 +4,27 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>smartsplit</title>
+    <meta name="theme-color" content="#0b0c10" />
+    <meta name="description" content="A calmer way to share group expenses and settle up." />
+    <title>SmartSplit — shared expenses, simply</title>
+    <script>
+      (() => {
+        const palettes = ["obsidian", "arctic", "emerald", "amethyst", "rose", "cyan", "sunset", "crimson"];
+        const appearanceKey = "smartsplit:appearance";
+        try {
+          const previous = localStorage.getItem("smartsplit:previous-palette");
+          const appearance = localStorage.getItem(appearanceKey) === "dark" ? "dark" : "light";
+          document.documentElement.dataset.mode = appearance;
+          const choices = palettes.filter((palette) => palette !== previous);
+          const selected = choices[Math.floor(Math.random() * choices.length)] || "obsidian";
+          document.documentElement.dataset.theme = selected;
+          localStorage.setItem("smartsplit:previous-palette", selected);
+        } catch {
+          document.documentElement.dataset.mode = "light";
+          document.documentElement.dataset.theme = palettes[Math.floor(Math.random() * palettes.length)];
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

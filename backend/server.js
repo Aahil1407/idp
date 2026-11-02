@@ -9,11 +9,38 @@ const { isDuplicateMembershipError, addGroupMember } = require("./group-membersh
 const { validateExpensePayload, validateExpenseMembership, parseAmountToPaise } = require("./expense-validation");
 const { createExpenseWithSplits } = require("./expense-write");
 const { recordGroupPayment } = require("./group-payments");
+const {
+    DUMMY_HASH,
+    SESSION_TTL_DAYS,
+    clearSessionCookie,
+    createAuthRateLimiter,
+    createAuthenticator,
+    createGroupMemberGuard,
+    createSessionCredentials,
+    hashPassword,
+    normalizeEmail,
+    readCookies,
+    sessionCookie,
+    validateDeviceId,
+    validatePassword,
+    verifyPassword,
+} = require("./auth");
 const MAX_UNSIGNED_INT = 4_294_967_295;
 
 const app = express();
+if (/^\d+$/.test(process.env.TRUST_PROXY || "")) {
+    app.set("trust proxy", Number(process.env.TRUST_PROXY));
+}
 
-app.use(cors());
+const allowedOrigins = new Set((process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "http://localhost:5173,http://127.0.0.1:5173")
+    .split(",").map((origin) => origin.trim()).filter(Boolean));
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+        callback(new Error("Origin is not allowed by SmartSplit CORS policy"));
+    },
+    credentials: true,
+}));
 app.use(express.json());
 app.locals.database = null;
 
@@ -51,13 +78,170 @@ app.get("/health", (req, res) => {
 
 
 // ==========================================
+// ACCOUNT AND DEVICE SESSIONS
+// ==========================================
+
+const authRateLimit = createAuthRateLimiter();
+const authenticate = createAuthenticator(db, app);
+
+function requireMemberForUser(userId, groupId, callback) {
+    if (app.locals.authDisabled === true) return callback(null, true);
+    db.query("SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ? LIMIT 1", [groupId, userId], (err, rows) => {
+        if (err) return callback(err, false);
+        callback(null, rows.length > 0);
+    });
+}
+
+function normalizeDeviceName(value) {
+    const cleaned = typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 100) : "";
+    return cleaned || "This browser";
+}
+
+function createDeviceSession(userId, deviceId, deviceName, res, status = 200) {
+    const { token, tokenHash } = createSessionCredentials();
+    db.query("DELETE FROM user_sessions WHERE expires_at <= UTC_TIMESTAMP() OR (user_id = ? AND device_id = ?)", [userId, deviceId], (deleteError) => {
+        if (deleteError) {
+            console.error("Could not replace device session:", deleteError.message);
+            return res.status(503).json({ error: "Unable to start a secure session. Try again." });
+        }
+        db.query(`
+            INSERT INTO user_sessions (user_id, device_id, device_name, token_hash, expires_at, last_seen)
+            VALUES (?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL ${SESSION_TTL_DAYS} DAY), UTC_TIMESTAMP())
+        `, [userId, deviceId, deviceName, tokenHash], (insertError) => {
+            if (insertError) {
+                console.error("Could not create device session:", insertError.message);
+                return res.status(503).json({ error: "Unable to start a secure session. Try again." });
+            }
+            res.set("Cache-Control", "no-store");
+            res.set("Set-Cookie", sessionCookie(token));
+            res.status(status).json({ user: { user_id: Number(userId) } });
+        });
+    });
+}
+
+app.post("/api/auth/register", authRateLimit, async (req, res) => {
+    const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    const email = normalizeEmail(req.body.email);
+    const password = req.body.password;
+    const deviceId = req.get("X-Device-ID");
+    if (!name || name.length > 255) return res.status(400).json({ error: "Enter a name up to 255 characters." });
+    if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
+    const passwordError = validatePassword(password);
+    if (passwordError) return res.status(400).json({ error: passwordError });
+    if (!validateDeviceId(deviceId)) return res.status(400).json({ error: "This browser could not be identified. Refresh and try again." });
+
+    try {
+        const passwordHash = await hashPassword(password);
+        db.query("SELECT user_id FROM users WHERE LOWER(TRIM(email)) = ? LIMIT 1", [email], (lookupError, existing) => {
+            if (lookupError) {
+                console.error("Account lookup failed:", lookupError.message);
+                return res.status(503).json({ error: "Unable to create your account right now." });
+            }
+            if (existing.length) return res.status(409).json({ error: "We could not create an account with those details. Try signing in instead." });
+            db.query("INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)", [name, email, passwordHash], (insertError, result) => {
+                if (insertError) {
+                    if (insertError.code === "ER_DUP_ENTRY") return res.status(409).json({ error: "We could not create an account with those details. Try signing in instead." });
+                    console.error("Account creation failed:", insertError.message);
+                    return res.status(503).json({ error: "Unable to create your account right now." });
+                }
+                authRateLimit.reset(req);
+                createDeviceSession(result.insertId, deviceId, normalizeDeviceName(req.body.device_name), res, 201);
+            });
+        });
+    } catch (error) {
+        console.error("Password hashing failed:", error.message);
+        res.status(503).json({ error: "Unable to create your account right now." });
+    }
+});
+
+app.post("/api/auth/login", authRateLimit, async (req, res) => {
+    const email = normalizeEmail(req.body.email);
+    const password = req.body.password;
+    const deviceId = req.get("X-Device-ID");
+    if (!email || email.length > 320 || typeof password !== "string" || Buffer.byteLength(password, "utf8") > 256) {
+        return res.status(400).json({ error: "Enter a valid email and password." });
+    }
+    if (!validateDeviceId(deviceId)) return res.status(400).json({ error: "This browser could not be identified. Refresh and try again." });
+    db.query("SELECT user_id, name, email, password_hash FROM users WHERE LOWER(email) = ? LIMIT 1", [email], async (lookupError, rows) => {
+        if (lookupError) {
+            console.error("Account sign-in lookup failed:", lookupError.message);
+            return res.status(503).json({ error: "Unable to sign in right now." });
+        }
+        const account = rows[0];
+        try {
+            const validPassword = await verifyPassword(password, account?.password_hash || await DUMMY_HASH);
+            if (!account || !account.password_hash || !validPassword) return res.status(401).json({ error: "Email or password is incorrect." });
+            authRateLimit.reset(req);
+            createDeviceSession(account.user_id, deviceId, normalizeDeviceName(req.body.device_name), res);
+        } catch (error) {
+            console.error("Password verification failed:", error.message);
+            res.status(503).json({ error: "Unable to sign in right now." });
+        }
+    });
+});
+
+app.get("/api/auth/me", authenticate, (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json({ user: req.user });
+});
+
+app.get("/api/auth/sessions", authenticate, (req, res) => {
+    db.query(`
+        SELECT session_id, device_id, device_name, created_at, last_seen, expires_at
+        FROM user_sessions
+        WHERE user_id = ? AND expires_at > UTC_TIMESTAMP()
+        ORDER BY last_seen DESC
+    `, [req.user.user_id], (err, rows) => {
+        if (err) {
+            console.error("Device session list failed:", err.message);
+            return res.status(503).json({ error: "Unable to load your signed-in devices." });
+        }
+        res.set("Cache-Control", "no-store");
+        res.json(rows.map((row) => ({ ...row, session_id: Number(row.session_id), current: row.device_id === req.authSession.device_id })));
+    });
+});
+
+app.post("/api/auth/logout", authenticate, (req, res) => {
+    db.query("DELETE FROM user_sessions WHERE session_id = ? AND user_id = ?", [req.authSession.session_id, req.user.user_id], (err) => {
+        if (err) return res.status(503).json({ error: "Unable to sign out. Try again." });
+        res.set("Cache-Control", "no-store");
+        res.set("Set-Cookie", clearSessionCookie());
+        res.json({ message: "Signed out." });
+    });
+});
+
+app.post("/api/auth/logout-all", authenticate, (req, res) => {
+    db.query("DELETE FROM user_sessions WHERE user_id = ?", [req.user.user_id], (err) => {
+        if (err) return res.status(503).json({ error: "Unable to sign out devices. Try again." });
+        res.set("Cache-Control", "no-store");
+        res.set("Set-Cookie", clearSessionCookie());
+        res.json({ message: "All devices have been signed out." });
+    });
+});
+
+app.delete("/api/auth/sessions/:sessionId", authenticate, (req, res) => {
+    const sessionId = Number(req.params.sessionId);
+    if (!Number.isSafeInteger(sessionId) || sessionId <= 0) return res.status(400).json({ error: "Choose a valid device session." });
+    if (sessionId === req.authSession.session_id) return res.status(400).json({ error: "Use Sign out on this device to end your current session." });
+    db.query("DELETE FROM user_sessions WHERE session_id = ? AND user_id = ?", [sessionId, req.user.user_id], (err, result) => {
+        if (err) return res.status(503).json({ error: "Unable to sign out that device." });
+        if (!result.affectedRows) return res.status(404).json({ error: "That device session was not found." });
+        res.json({ message: "Device signed out." });
+    });
+});
+
+app.use("/api", authenticate);
+app.use("/api/groups/:id", createGroupMemberGuard(db, app));
+
+
+// ==========================================
 // USERS
 // ==========================================
 
 // GET ALL USERS
 app.get("/api/users", (req, res) => {
 
-    const sql = "SELECT * FROM users";
+    const sql = "SELECT user_id, name, email FROM users ORDER BY name ASC";
 
     db.query(sql, (err, results) => {
 
@@ -76,39 +260,7 @@ app.get("/api/users", (req, res) => {
 
 // CREATE USER
 app.post("/api/users", (req, res) => {
-
-    const { name, email, phone, upi_id } = req.body;
-
-    if (!name || !email) {
-        return res.status(400).json({
-            error: "Name and email are required"
-        });
-    }
-
-    const sql = `
-        INSERT INTO users (name, email, phone, upi_id)
-        VALUES (?, ?, ?, ?)
-    `;
-
-    db.query(
-        sql,
-        [name, email, phone || null, upi_id || null],
-        (err, result) => {
-
-            if (err) {
-                console.log(err);
-
-                return res.status(500).json({
-                    error: "Database error"
-                });
-            }
-
-            res.status(201).json({
-                message: "User created successfully!",
-                user_id: result.insertId
-            });
-        }
-    );
+    res.status(410).json({ error: "Create an account through /api/auth/register." });
 });
 
 
@@ -120,11 +272,15 @@ app.post("/api/users", (req, res) => {
 app.get("/api/groups", (req, res) => {
     const sql = `
         SELECT group_id, group_name
-        FROM groups_table
-        ORDER BY group_id ASC
+        FROM groups_table g
+        WHERE EXISTS (
+            SELECT 1 FROM group_members gm
+            WHERE gm.group_id = g.group_id AND gm.user_id = ?
+        )
+        ORDER BY g.group_id ASC
     `;
 
-    db.query(sql, (err, results) => {
+    db.query(sql, [req.user.user_id], (err, results) => {
         if (err) {
             console.log(err);
             return res.status(500).json({
@@ -138,7 +294,7 @@ app.get("/api/groups", (req, res) => {
 
 // CREATE GROUP
 app.post("/api/groups", (req, res) => {
-    const validation = validateGroupInput(req.body);
+    const validation = validateGroupInput({ ...req.body, created_by: req.user.user_id });
     if (validation.error) {
         return res.status(400).json({ error: validation.error });
     }
@@ -468,12 +624,15 @@ app.post("/api/settlements/pay", (req, res) => {
     // Verify the group exists and both users are members before recording a payment.
     // ==========================================
 
-    recordGroupPayment(db, {
-        groupId,
-        fromUser,
-        toUser,
-        amountPaise: paymentAmountPaise,
-    }, (err, result) => {
+    requireMemberForUser(req.user.user_id, groupId, (membershipError, isMember) => {
+        if (membershipError) return res.status(503).json({ error: "Unable to verify group membership." });
+        if (!isMember) return res.status(403).json({ error: "You are not a member of this group." });
+        recordGroupPayment(db, {
+            groupId,
+            fromUser,
+            toUser,
+            amountPaise: paymentAmountPaise,
+        }, (err, result) => {
         if (err) {
             console.log(err);
             return res.status(500).json({ error: "Could not create payment" });
@@ -492,6 +651,7 @@ app.post("/api/settlements/pay", (req, res) => {
             group_id: groupId,
             status: "pending"
         });
+        });
     });
 });
 
@@ -503,7 +663,7 @@ app.put("/api/settlements/:id/settle", (req, res) => {
 
     const paymentId = req.params.id;
 
-    markPaymentSettled(db, paymentId, (err, wasSettled) => {
+    const finishSettlement = () => markPaymentSettled(db, paymentId, (err, wasSettled) => {
         if (err) {
             console.log(err);
             return res.status(500).json({ error: "Could not update payment" });
@@ -521,6 +681,18 @@ app.put("/api/settlements/:id/settle", (req, res) => {
             status: "settled"
         });
 
+    });
+    if (app.locals.authDisabled === true) return finishSettlement();
+    db.query(`
+        SELECT p.payment_id
+        FROM payments p
+        JOIN group_members gm ON gm.group_id = p.group_id AND gm.user_id = ?
+        WHERE p.payment_id = ? AND p.status = 'pending'
+        LIMIT 1
+    `, [req.user.user_id, paymentId], (accessError, rows) => {
+        if (accessError) return res.status(503).json({ error: "Unable to verify access to this settlement." });
+        if (!rows.length) return res.status(404).json({ error: "Pending group settlement not found." });
+        finishSettlement();
     });
 });
 
