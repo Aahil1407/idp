@@ -42,6 +42,10 @@ current verified status here and in "Completed work" takes precedence.
 - Preserved expense split and settlement behavior and added auth tests.
 - Added migration `backend/migrations/20261102_add_device_accounts.sql`
   and schema/setup documentation. The migration file is **not applied**.
+- A manual, read-only Railway export was saved locally outside the repo.
+  Production schema/data were not changed. The account migration preflight
+  found one normalized-email collision, so the migration remains blocked
+  pending owner review of the affected legacy accounts.
 - The full group-payment migration `20261015_add_group_id_to_payments.sql`
   is recorded in `backend/README.md` as applied and verified on Railway;
   historical payment rows remain unassigned. The `20261016` file is a
@@ -74,10 +78,10 @@ current verified status here and in "Completed work" takes precedence.
 
 ### Remaining work, in priority order
 
-1. Review the account migration against a disposable/local MySQL database
-   and apply it there. Check duplicate normalized emails before adding
-   the unique email constraint. This account migration has not been
-   applied to any database.
+1. Resolve the normalized-email collision found by the production
+   preflight with the account owner. Do not delete, merge, or rewrite
+   either legacy account by guessing. Then review and apply the account
+   migration; it has not been applied to any database.
 2. Manually verify registration, login, refresh/session persistence,
    same-device replacement, per-device revocation, logout-all, protected
    routes, group membership authorization, and profile behavior against
