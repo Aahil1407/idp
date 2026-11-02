@@ -239,3 +239,47 @@ body:has(.welcome-page) .top-controls { display:none; }
 .profile-devices { margin-top:18px; padding-top:2px; }.profile-devices h2 { margin:0 0 8px; font:700 13px/1.3 "Manrope","Segoe UI",sans-serif; }.device-session { display:flex; align-items:center; gap:8px; min-height:50px; border-bottom:1px solid var(--glass-border); }.device-icon { display:grid; width:27px; height:27px; flex:0 0 27px; place-items:center; border:1px solid var(--glass-border); border-radius:9px; color:var(--accent-strong); background:var(--surface); font-size:12px; }.device-session>div { display:grid; flex:1; gap:3px; min-width:0; }.device-session strong { overflow:hidden; font-size:8px; text-overflow:ellipsis; }.device-session small { color:var(--muted); font-size:7px; }.device-session button { border:0; color:var(--danger); background:transparent; font-size:8px; cursor:pointer; white-space:nowrap; }
 .signout-button,.signout-all-button { width:100%; min-height:38px; margin-top:9px; border:1px solid var(--glass-border); border-radius:11px; color:var(--text); background:var(--surface); font-size:9px; font-weight:700; cursor:pointer; }.signout-all-button { border-color:color-mix(in srgb,var(--danger) 33%,var(--glass-border)); color:var(--danger); }
 @media (max-width:420px) { .phone-app { width:calc(100% - 30px); padding-top:20px; }.top-controls { top:10px; right:10px; }.mode-page { padding-top:25px; }.mode-page .header { margin-bottom:38px; }.welcome-page { padding-top:24px; }.welcome-bottom { bottom:30px; }.reference-page { padding-top:20px; }.screen-heading h1 { font-size:24px; }.theme-gallery { grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; } }
+
+/* Bill splitting layout: compact participant rows with amount-driven sliders. */
+.add-expense-page .form-step-details { grid-template-columns:minmax(0,1fr); gap:7px; }
+.form-step-details .expense-detail-summary { min-height:42px; margin-bottom:4px; padding:9px 12px; border-radius:13px; }
+.form-step-details .expense-detail-summary>div { gap:2px; }
+.form-step-details .expense-detail-summary>div span { font-size:11px; }
+.form-step-details .expense-detail-summary small { font-size:8px; }
+.split-method-detail { display:grid; gap:7px; margin:0; color:var(--text); font-size:11px; font-weight:750; }
+.split-method-detail .split-options { gap:6px; }
+.split-method-detail .split-option { min-height:42px; border-radius:13px; font-size:10px; }
+.participant-search-bar { display:flex; min-height:40px; align-items:center; gap:8px; margin:2px 0; padding:0 12px; border:1px solid var(--glass-border); border-radius:14px; background:linear-gradient(145deg,var(--glass-top),var(--glass-bottom)),var(--surface); }
+.participant-search-bar>span { color:var(--muted); font-size:20px; line-height:1; }
+.participant-search-bar input { width:100%; min-height:38px; padding:0; border:0; outline:0; color:var(--text); background:transparent; font-size:10px; }
+.participant-search-bar input:focus { box-shadow:none; }
+.bill-participant-list { margin:0; padding:2px 0; border:0; background:transparent; }
+.bill-participant-list legend { margin-bottom:4px; padding:0 3px; font-size:11px; }
+.bill-participant-list>.expense-field-hint { margin:0 0 8px; font-size:9px; }
+.bill-participant-list .allocation-list { gap:7px; margin-top:0; }
+.allocation-choice-row,.allocation-row-reference { position:relative; display:grid; grid-template-columns:minmax(0,1fr); gap:4px; min-width:0; padding:10px 12px; border:1px solid var(--glass-border); border-radius:15px; background:linear-gradient(145deg,var(--glass-top),var(--glass-bottom)),var(--surface); box-shadow:inset 0 1px rgba(255,255,255,.13),0 8px 20px rgba(15,30,50,.08); }
+.allocation-choice-row { grid-template-columns:32px minmax(0,1fr) auto; min-height:54px; align-items:center; cursor:pointer; }
+.allocation-choice-row>input,.allocation-person-check>input { position:absolute; width:1px; height:1px; opacity:0; }
+.allocation-choice-row:focus-within,.allocation-person-check:focus-within { outline:2px solid var(--accent); outline-offset:2px; }
+.allocation-choice-row .allocation-avatar,.allocation-person-check .allocation-avatar { display:grid; width:31px; height:31px; place-items:center; border:1px solid var(--accent-wash); border-radius:50%; color:var(--accent-strong); background:var(--accent-soft); font-size:11px; font-weight:750; }
+.allocation-choice-row .allocation-person-name,.allocation-row-heading .allocation-person-name { overflow:hidden; min-width:0; font-size:11px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+.allocation-add-mark { color:var(--accent-strong); font-size:17px; }
+.allocation-row-reference { grid-template-columns:minmax(0,1fr); padding:10px 12px 8px; }
+.allocation-row-heading { display:flex; min-width:0; align-items:center; gap:9px; }
+.allocation-person-check { position:relative; display:grid; width:31px; height:31px; flex:0 0 31px; place-items:center; cursor:pointer; }
+.allocation-person-name { flex:1; }
+.allocation-current-amount { flex-shrink:0; color:var(--text); font-size:11px; }
+.allocation-row-reference .allocation-range-wrap { grid-column:auto; height:19px; margin:0 1px; }
+.allocation-row-reference .allocation-range-track { top:7px; height:6px; border:0; background:linear-gradient(90deg,rgba(112,150,179,.54),rgba(112,127,145,.28)); }
+.allocation-row-reference .allocation-range-track>span { background:linear-gradient(90deg,var(--accent-strong),var(--accent)); }
+.allocation-row-reference .allocation-range::-webkit-slider-thumb { width:15px; height:15px; margin-top:-4px; }
+.allocation-row-reference .allocation-range::-moz-range-thumb { width:12px; height:12px; }
+.allocation-row-reference .allocation-range:disabled { cursor:default; opacity:1; }
+.allocation-row-reference .allocation-range:disabled::-webkit-slider-thumb { background:var(--accent-strong); }
+.allocation-percent-label { justify-self:end; color:var(--muted); font-size:8px; }
+.form-step-details .allocation-total { margin-top:2px; padding:11px 13px; border:1px solid var(--glass-border); border-radius:13px; background:linear-gradient(145deg,var(--glass-top),var(--glass-bottom)),var(--surface); }
+.form-step-details .allocation-total>span { color:var(--muted); font-size:10px; }
+.form-step-details .allocation-total>strong { color:var(--text); font-size:15px; }
+.form-step-details .allocation-total>small { font-size:8px; }
+.form-step-details .submit-expense { min-height:46px; border-radius:999px; }
+.form-step-details .expense-review-back { min-height:34px; }

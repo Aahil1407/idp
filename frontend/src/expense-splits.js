@@ -18,11 +18,11 @@ export function parsePercentageToBasisPoints(value) {
   return Number.isSafeInteger(basisPoints) ? basisPoints : null;
 }
 
-export function validateExpenseFields({ description, amountPaise, paidBy, participantIds, groupMemberIds, splitType }) {
+export function validateExpenseFields({ description, amountPaise, paidBy, participantIds, groupMemberIds, splitType, requireParticipants = true }) {
   if (!String(description ?? "").trim()) return "Enter an expense description.";
   if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) return "Enter a valid amount greater than zero, with no more than two decimal places.";
   if (!paidBy) return "Choose who paid for this expense.";
-  if (!Array.isArray(participantIds) || participantIds.length === 0) return "Select at least one expense participant.";
+  if (requireParticipants && (!Array.isArray(participantIds) || participantIds.length === 0)) return "Select at least one expense participant.";
 
   const validMemberIds = groupMemberIds instanceof Set
     ? groupMemberIds

@@ -50,6 +50,7 @@ function AddExpense() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [step, setStep] = useState(1);
+  const [memberSearch, setMemberSearch] = useState("");
 
   const loadMembers = useCallback(async () => {
     try {
@@ -147,6 +148,7 @@ function AddExpense() {
       participantIds: selectedParticipants,
       groupMemberIds: memberIds,
       splitType,
+      requireParticipants: step === 2,
     });
     if (validationError) {
       setError(validationError);
@@ -227,7 +229,7 @@ function AddExpense() {
       <button className="back-button" onClick={() => navigate(`/group/${groupId}`)}>←</button>
 
       <div className="page-header">
-          <h1>{step === 1 ? "Add Expense" : "Add Details"}</h1>
+          <h1>{step === 1 ? "Add Expense" : "Bill splitting"}</h1>
           <p>{step === 1 ? `Group #${groupId}` : `${selectedParticipants.length} ${selectedParticipants.length === 1 ? "person" : "people"} · ${splitType} split`}</p>
       </div>
 
@@ -235,7 +237,7 @@ function AddExpense() {
         <p className="expense-state-message" role="alert">This group has no members yet. Add a participant before recording an expense.</p>
       ) : (
         <form className={step === 1 ? "expense-form form-step-entry" : "expense-form form-step-details"} onSubmit={handleAddExpense} noValidate>
-          {step === 2 && <section className="expense-detail-summary"><div><span>{description}</span><small>{members.find((member) => String(member.user_id) === paidBy)?.name ? `Paid by ${members.find((member) => String(member.user_id) === paidBy).name}` : "Shared expense"}</small></div><strong>₹{(amountPaise / 100).toFixed(2)}</strong></section>}
+          {step === 2 && <section className="expense-detail-summary"><div><span>{description}</span><small>{members.find((member) => String(member.user_id) === paidBy)?.name ? `Paid by ${members.find((member) => String(member.user_id) === paidBy).name}` : "Shared expense"}</small></div></section>}
 
           <div className="form-group expense-entry-field">
             <label htmlFor="expense-description">Expense name</label>
@@ -278,134 +280,77 @@ function AddExpense() {
             </select>
           </div>
 
-          <div className="form-group expense-entry-field">
-            <label>Split method</label>
-            <div className="split-options">
-              {["Equal", "Exact", "Percentage", "Custom"].map((type) => (
-                <button
-                  type="button"
-                  key={type}
-                  className={splitType === type ? "split-option active" : "split-option"}
-                  onClick={() => changeSplitType(type)}
-                  disabled={saving}
-                >
-                  {type === "Percentage" ? "Percent" : type}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {step === 2 && <div className="split-method-detail">
-            <span>Split type</span>
+            <span>Split method</span>
             <div className="split-options" role="group" aria-label="Choose expense split type">
-              {["Equal", "Exact", "Custom", "Percentage"].map((type) => <button type="button" key={type} className={splitType === type ? "split-option active" : "split-option"} aria-label={`Split by ${type.toLowerCase()}`} aria-pressed={splitType === type} onClick={() => changeSplitType(type)} disabled={saving}>{type === "Percentage" ? "Percent" : type}</button>)}
+              {["Equal", "Exact", "Percentage", "Custom"].map((type) => <button type="button" key={type} className={splitType === type ? "split-option active" : "split-option"} aria-label={`Split by ${type.toLowerCase()}`} aria-pressed={splitType === type} onClick={() => changeSplitType(type)} disabled={saving}>{type === "Percentage" ? "Percent" : type}</button>)}
             </div>
           </div>}
 
-          <fieldset className="form-group expense-participants">
-            <legend>{step === 1 ? "Select friends" : "Split details"}</legend>
-            {step === 1 && <p className="expense-field-hint">Select who shares this expense. The payer is included only if you select them here.</p>}
-            {step === 1 && <div className="participants expense-entry-field">
-              {members.map((member) => {
+          {step === 2 && <label className="participant-search-bar">
+            <span aria-hidden="true">⌕</span>
+            <input type="search" value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Search name, email" aria-label="Search group members" />
+          </label>}
+
+          {step === 2 && <fieldset className="form-group expense-participants bill-participant-list">
+            <legend>Select friends</legend>
+            <p className="expense-field-hint">Choose who shares this bill. The payer joins only if selected.</p>
+            <div className="allocation-list">
+              {members.filter((member) => `${member.name || ""} ${member.email || ""}`.toLowerCase().includes(memberSearch.trim().toLowerCase())).map((member) => {
                 const userId = String(member.user_id);
                 const checked = selectedParticipants.includes(userId);
-                return (
-                  <label className={checked ? "expense-participant selected" : "expense-participant"} key={member.user_id}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={saving}
-                      onChange={() => toggleParticipant(userId)}
-                    />
-                    <span className="avatar">{member.name?.charAt(0)?.toUpperCase() || "?"}</span>
-                    <span className="expense-participant-name">{member.name}</span>
-                    <span className="check" aria-hidden="true">✓</span>
-                  </label>
-                );
+                if (!checked) {
+                  return <label className="allocation-choice-row" key={userId}>
+                    <input type="checkbox" checked={false} disabled={saving} onChange={() => toggleParticipant(userId)} />
+                    <span className="allocation-avatar" aria-hidden="true">{member.name?.charAt(0)?.toUpperCase() || "?"}</span>
+                    <span className="allocation-person-name">{member.name || "Group member"}</span>
+                    <span className="allocation-add-mark" aria-hidden="true">＋</span>
+                  </label>;
+                }
+
+                const isPercentage = splitType === "Percentage";
+                const entryMap = isPercentage ? percentageEntries : amountEntries;
+                const fieldError = allocation.fieldErrors[userId];
+                const currentSplitAmount = allocation.splits.find((split) => String(split.user_id) === userId)?.amount_owed;
+                const rawPaise = isPercentage ? Math.round(amountPaise * Number(entryMap[userId] || 0) / 100) : parseAmountToPaise(entryMap[userId]);
+                const currentPaise = currentSplitAmount === undefined ? (Number.isSafeInteger(rawPaise) ? rawPaise : 0) : Math.round(currentSplitAmount * 100);
+                const rangeTotal = isPercentage ? 10_000 : amountPaise;
+                const rangeValue = isPercentage ? Math.round(Number(entryMap[userId] || 0) * 100) : currentPaise;
+                const rangeMaximum = Number.isSafeInteger(rangeTotal) ? Math.max(1, rangeTotal - Math.max(0, selectedParticipants.length - 1)) : 1;
+                const rangePercent = rangeTotal > 0 ? Math.min(100, rangeValue / rangeTotal * 100) : 0;
+                return <div className={fieldError ? "allocation-row allocation-row-reference allocation-invalid" : "allocation-row allocation-row-reference"} key={userId}>
+                  <div className="allocation-row-heading">
+                    <label className="allocation-person-check">
+                      <input type="checkbox" checked={true} disabled={saving} onChange={() => toggleParticipant(userId)} aria-label={`Remove ${member.name} from this split`} />
+                      <span className="allocation-avatar" aria-hidden="true">{member.name?.charAt(0)?.toUpperCase() || "?"}</span>
+                    </label>
+                    <span className="allocation-person-name">{member.name || "Group member"}</span>
+                    <strong className="allocation-current-amount">₹{(currentPaise / 100).toFixed(2)}</strong>
+                  </div>
+                  <div className="allocation-range-wrap">
+                    <div className="allocation-range-track" aria-hidden="true"><span style={{ width: `${rangePercent}%` }} /></div>
+                    <input className="allocation-range" type="range" min="1" max={rangeMaximum} step="1" value={Math.min(rangeMaximum, Math.max(1, rangeValue || 1))} aria-label={`${member.name || "Member"} allocation`} aria-valuetext={isPercentage ? `${(rangeValue / 100).toFixed(2)} percent` : `₹${(rangeValue / 100).toFixed(2)}`} disabled={saving || selectedParticipants.length < 2 || splitType === "Equal" || !Number.isSafeInteger(amountPaise)} onChange={(event) => { adjustAllocation(userId, event.target.value); setError(""); }} />
+                  </div>
+                  {isPercentage && <span className="allocation-percent-label">{Number(entryMap[userId] || 0).toFixed(2)}%</span>}
+                  {fieldError && <span className="allocation-field-error" role="alert">{fieldError}</span>}
+                </div>;
               })}
-            </div>}
+              {members.every((member) => !`${member.name || ""} ${member.email || ""}`.toLowerCase().includes(memberSearch.trim().toLowerCase())) && <p className="member-feedback">No members match that search.</p>}
+            </div>
+          </fieldset>}
 
-            {selectedParticipants.length > 0 && step === 2 && (
-              <div className="allocation-list">
-                {selectedParticipants.map((userId) => {
-                  const member = members.find((item) => String(item.user_id) === userId);
-                  const isPercentage = splitType === "Percentage";
-                  const entryMap = isPercentage ? percentageEntries : amountEntries;
-                  const setEntryMap = isPercentage ? setPercentageEntries : setAmountEntries;
-                  const fieldError = allocation.fieldErrors[userId];
-                  const currentSplitAmount = allocation.splits.find((split) => String(split.user_id) === userId)?.amount_owed;
-                  const currentPaise = currentSplitAmount === undefined ? (isPercentage ? amountPaise * Number(entryMap[userId] || 0) / 100 : Number.isSafeInteger(parseAmountToPaise(entryMap[userId])) ? parseAmountToPaise(entryMap[userId]) : 0) : Math.round(currentSplitAmount * 100);
-                  const rangeTotal = isPercentage ? 10_000 : amountPaise;
-                  const rangeValue = isPercentage ? Math.round(Number(entryMap[userId] || 0) * 100) : currentPaise;
-                  const rangeMaximum = Number.isSafeInteger(rangeTotal) ? Math.max(1, rangeTotal - Math.max(0, selectedParticipants.length - 1)) : 1;
-                  const rangePercent = rangeTotal > 0 ? Math.min(100, rangeValue / rangeTotal * 100) : 0;
-                  return (
-                    <div className={fieldError ? "allocation-row allocation-invalid" : "allocation-row"} key={userId}>
-                      <div className="allocation-person">
-                        <span className="allocation-avatar" aria-hidden="true">{["👩🏻", "👨🏽", "👨🏻", "👩🏾", "👦🏼", "👨🏼"][Number(userId) % 6]}</span>
-                        <span><span className="allocation-person-name">{member?.name || "Group member"}</span><span className="allocation-person-label">{isPercentage ? "Share percent" : "Owes"}</span></span>
-                      </div>
-                      {splitType === "Equal" ? (
-                        <strong className="allocation-equal-share">₹{(allocation.splits.find((split) => String(split.user_id) === userId)?.amount_owed || 0).toFixed(2)}</strong>
-                      ) : <label className="allocation-input-wrap">
-                        <span className="allocation-input-prefix" aria-hidden="true">{isPercentage ? "%" : "₹"}</span>
-                        <input
-                          aria-label={`${isPercentage ? "Percentage" : "Exact amount"} for ${member?.name || "participant"}`}
-                          aria-invalid={Boolean(fieldError)}
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={entryMap[userId] ?? ""}
-                          disabled={saving}
-                          onChange={(event) => {
-                            setEntryMap((current) => ({ ...current, [userId]: event.target.value }));
-                            setError("");
-                          }}
-                        />
-                      </label>}
-                      <div className="allocation-range-wrap">
-                        <div className="allocation-range-track" aria-hidden="true"><span style={{ width: `${rangePercent}%` }} /></div>
-                        <input className="allocation-range" type="range" min="1" max={rangeMaximum} step="1" value={Math.min(rangeMaximum, Math.max(1, rangeValue || 1))} style={{ "--allocation-progress": `${rangePercent}%` }} aria-label={`${member?.name || "Member"} allocation`} aria-valuetext={isPercentage ? `${(rangeValue / 100).toFixed(2)} percent` : `₹${(rangeValue / 100).toFixed(2)}`} disabled={saving || selectedParticipants.length < 2 || splitType === "Equal" || !Number.isSafeInteger(amountPaise)} onChange={(event) => adjustAllocation(userId, event.target.value)} />
-                      </div>
-                      {fieldError && <span className="allocation-field-error" role="alert">{fieldError}</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {selectedParticipants.length > 0 && step === 2 && (
-              <div className={allocation.totalError ? "allocation-total allocation-total-invalid" : "allocation-total allocation-total-valid"} aria-live="polite">
-                {splitType === "Percentage" ? (
-                  <>
-                    <span>Percentage total</span>
-                    <strong>{Number.isSafeInteger(allocation.totalBasisPoints) ? `${(allocation.totalBasisPoints / 100).toFixed(2)}%` : "—"}</strong>
-                    <small>{allocation.totalError || `100.00% · allocations total ${amountPaise === null ? "—" : `₹${(amountPaise / 100).toFixed(2)}`}`}</small>
-                  </>
-                ) : splitType === "Equal" ? (
-                  <>
-                    <span>Equal share per selected participant</span>
-                    <strong>{allocation.splits.length ? `₹${allocation.splits[0].amount_owed.toFixed(2)}` : "—"}</strong>
-                    <small>{allocation.totalError || `${allocation.splits.length} allocations · total ₹${(amountPaise / 100).toFixed(2)}`}</small>
-                  </>
-                ) : (
-                  <>
-                    <span>{splitType} allocation total</span>
-                    <strong>{Number.isSafeInteger(allocation.totalPaise) ? `₹${(allocation.totalPaise / 100).toFixed(2)}` : "—"}</strong>
-                    <small>{allocation.totalError || `Matches expense total ₹${(amountPaise / 100).toFixed(2)}`}</small>
-                  </>
-                )}
-              </div>
-            )}
-          </fieldset>
+          {step === 2 && <div className={allocation.totalError ? "allocation-total allocation-total-invalid" : "allocation-total allocation-total-valid"} aria-live="polite">
+            <span>Total bill</span>
+            <strong>₹{Number.isSafeInteger(amountPaise) ? (amountPaise / 100).toFixed(2) : "—"}</strong>
+            <small>{selectedParticipants.length ? allocation.totalError || `${selectedParticipants.length} people · ${splitType} split` : "Select at least one person to share this bill."}</small>
+          </div>}
 
           {error && <p className="expense-state-message expense-state-error" role="alert">{error}</p>}
           {success && <p className="expense-state-message expense-state-success" role="status">{success}</p>}
 
           {step === 2 && <button type="button" className="expense-review-back" onClick={() => setStep(1)} disabled={saving}>← Edit expense</button>}
           <button type="submit" className="add-expense-button submit-expense" disabled={saving}>
-            {saving ? <><span className="group-spinner" aria-hidden="true" /> Saving expense…</> : step === 1 ? "Next →" : "Add Expense"}
+            {saving ? <><span className="group-spinner" aria-hidden="true" /> Saving expense…</> : step === 1 ? "Next →" : "Send bill →"}
           </button>
         </form>
       )}
