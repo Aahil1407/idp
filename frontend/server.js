@@ -9,7 +9,10 @@ const server = createServer(async (request, response) => {
   try {
     await handler(request, response, {
       public: distDirectory,
-      rewrites: [{ source: "/group/**", destination: "/index.html" }],
+      rewrites: [
+        { source: "/group/**", destination: "/index.html" },
+        { source: "/join/**", destination: "/index.html" },
+      ],
     });
   } catch (error) {
     console.error("Static file request failed:", error);

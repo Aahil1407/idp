@@ -76,6 +76,6 @@ The login flow is implemented and its database migration is applied in Railway p
 
 ## Group invite links
 
-The frontend and API support 30-day group invite links. The API generates a random token, stores only its SHA-256 digest, and adds the signed-in user to the group after the token is checked. Apply `migrations/20261102_add_group_invites.sql` to a database before using the invite controls there. This migration is present in the repository but has not been applied to Railway production.
+The frontend and API support 30-day group invite links. The API generates a random token, stores only its SHA-256 digest, and adds the signed-in user to the group after the token is checked. Apply `migrations/20261102_add_group_invites.sql` to a database before using the invite controls there. This migration was applied and verified in Railway production on 2026-11-02.
 
 Group, member, expense, balance, and settlement APIs require a valid device session. Group routes verify membership, group listing is limited to the signed-in member, and settlement writes require group membership. Expense split membership is checked in application code, not enforced by database foreign keys. Payment status remains the existing `pending` / `settled` pair. Live deployment health checks are reported separately from local test results; they do not substitute for authenticated, isolated write-flow verification.

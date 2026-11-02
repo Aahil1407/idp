@@ -480,6 +480,7 @@ function AppRoutes() {
       <Route path="/" element={<Welcome />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route path="/join/:token" element={<GroupJoin />} />
       <Route element={<RequireAuth />}>
         <Route path="/choose" element={<ModeChoice />} />
         <Route path="/personal" element={<Home />} />
@@ -493,7 +494,6 @@ function AppRoutes() {
         <Route path="/group/:groupId/add-expense" element={<AddExpense />} />
         <Route path="/group/:groupId/balances" element={<Balances />} />
         <Route path="/group/:groupId/settlement" element={<Settlement />} />
-        <Route path="/join/:token" element={<GroupJoin />} />
       </Route>
     </Routes>
   </>;

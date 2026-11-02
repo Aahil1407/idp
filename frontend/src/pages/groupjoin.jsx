@@ -1,10 +1,13 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { apiFetch } from "../config";
+import { useAuth } from "../auth-context";
 
 function GroupJoin() {
   const { token } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user, ready } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -23,6 +26,8 @@ function GroupJoin() {
     }
   }
 
+  if (!ready) return <main className="phone-app auth-loading" role="status">Checking your sign-in…</main>;
+
   return <main className="phone-app join-invite-page">
     <Link className="screen-back" to="/personal" aria-label="Back home">‹</Link>
     <section className="join-invite-card">
@@ -31,7 +36,10 @@ function GroupJoin() {
       <h1>Join this group</h1>
       <p>Join your friends on SmartSplit to see shared expenses and keep track together.</p>
       {error && <p className="auth-error" role="alert">{error}</p>}
-      <button className="auth-submit" type="button" onClick={joinGroup} disabled={busy}>{busy ? "Joining group…" : "Join group →"}</button>
+      {user ? <button className="auth-submit" type="button" onClick={joinGroup} disabled={busy}>{busy ? "Joining group…" : "Join group →"}</button> : <div className="join-auth-actions">
+        <Link className="auth-submit join-auth-link" to="/signup" state={{ from: location }}>Create account to join →</Link>
+        <p className="auth-switch">Already have an account? <Link to="/login" state={{ from: location }}>Sign in</Link></p>
+      </div>}
     </section>
   </main>;
 }
